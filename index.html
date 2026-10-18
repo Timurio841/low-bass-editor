@@ -8,19 +8,15 @@
     <style>
         * { box-sizing: border-box; touch-action: none; }
         body { margin: 0; background: #141414; color: white; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-        
         .header { display: flex; justify-content: space-between; padding: 10px; background: #1a1a1a; align-items: center; }
         .time { color: #4a9eff; font-weight: bold; font-size: 14px; }
-        
         .editor-container { flex-grow: 1; position: relative; overflow: hidden; background: #0d0d0d; }
         #waveform { position: absolute; top: 20px; left: 0; width: 100%; height: 100px; opacity: 0.4; }
         #notes-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; }
-        
         .controls { background: #1a1a1a; padding: 10px; display: flex; flex-direction: column; gap: 5px; z-index: 20; }
         .slider-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #aaa; }
         .slider-row input { width: 50%; accent-color: #3a8eef; }
         .val { width: 50px; text-align: right; color: #fff; font-weight: bold; }
-        
         .actions { display: flex; gap: 10px; padding: 10px; background: #141414; z-index: 20; }
         .btn { flex: 1; padding: 15px; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; color: white; }
         .btn-blue { background: #3a8eef; }
@@ -33,12 +29,10 @@
         <span>🎛 Low Bass Editor</span>
         <span class="time" id="timer">0:00 / 0:00</span>
     </div>
-    
     <div class="editor-container" id="editor-container">
         <div id="waveform"></div>
         <canvas id="notes-canvas"></canvas>
     </div>
-
     <div class="controls">
         <div class="slider-row">
             <span>Инструментал</span>
@@ -56,18 +50,15 @@
             <span class="val" id="val-kick">-12 dB</span>
         </div>
     </div>
-
     <div class="actions">
         <button class="btn btn-gray" onclick="moveNotes(-0.01)">◀</button>
         <button class="btn btn-gray" onclick="togglePlay()" id="play-btn">▶ Play</button>
         <button class="btn btn-gray" onclick="moveNotes(0.01)">▶</button>
         <button class="btn btn-green" onclick="save()">✓ Готово</button>
     </div>
-
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
-
         const urlParams = new URLSearchParams(window.location.search);
         const audioUrl = urlParams.get('audio');
         const duration = parseFloat(urlParams.get('duration') || "30");
@@ -79,31 +70,18 @@
         ];
 
         const wavesurfer = WaveSurfer.create({
-            container: '#waveform',
-            waveColor: '#3a8eef',
-            progressColor: '#ff4444',
-            height: 100,
-            barWidth: 2,
-            barGap: 1,
-            crossOrigin: 'anonymous'
+            container: '#waveform', waveColor: '#3a8eef', progressColor: '#ff4444',
+            height: 100, barWidth: 2, barGap: 1, crossOrigin: 'anonymous'
         });
 
-        // Если ссылка на аудио есть, загружаем
         if (audioUrl && audioUrl !== 'null') {
             wavesurfer.load(audioUrl);
-        } else {
-            console.log("Нет ссылки на аудио");
-            document.getElementById('timer').innerText = "Ошибка: нет аудио";
         }
 
         const canvas = document.getElementById('notes-canvas');
         const ctx = canvas.getContext('2d');
         const container = document.getElementById('editor-container');
-        let isDragging = false;
-        let startX = 0;
-        let noteStartPos = 0;
-        let selectedNote = null;
-        let currentPPS = 0; 
+        let isDragging = false, startX = 0, noteStartPos = 0, selectedNote = null, currentPPS = 0; 
 
         function resize() {
             canvas.width = container.clientWidth;
@@ -120,17 +98,13 @@
                 let x = i * currentPPS;
                 ctx.beginPath(); ctx.moveTo(x, 100); ctx.lineTo(x, canvas.height); ctx.stroke();
             }
-
             notes.forEach(note => {
                 let x = note.start * currentPPS;
                 let y = canvas.height - (note.freq - 15) * 4; 
                 let w = note.dur * currentPPS;
-
                 ctx.fillStyle = note.selected ? '#ffaa00' : (note.freq > 30 ? '#ffaa00' : '#7ad07a');
                 ctx.fillRect(x, y, Math.max(w, 10), 20); 
-                
-                ctx.fillStyle = 'black';
-                ctx.font = '10px Arial';
+                ctx.fillStyle = 'black'; ctx.font = '10px Arial';
                 ctx.fillText(note.freq + 'Hz', x + 2, y + 14);
             });
         }
@@ -141,10 +115,6 @@
         });
 
         function togglePlay() {
-            if (!audioUrl || audioUrl === 'null') {
-                alert("Аудиофайл не загружен!");
-                return;
-            }
             wavesurfer.playPause();
             document.getElementById('play-btn').innerText = wavesurfer.isPlaying() ? "⏸ Pause" : "▶ Play";
         }
@@ -153,21 +123,14 @@
             const rect = canvas.getBoundingClientRect();
             const x = e.touches[0].clientX - rect.left;
             const y = e.touches[0].clientY - rect.top;
-
             selectedNote = null;
             for (let note of notes) {
                 let nx = note.start * currentPPS;
                 let ny = canvas.height - (note.freq - 15) * 4;
                 let nw = Math.max(note.dur * currentPPS, 15); 
-                
                 if (x >= nx - 10 && x <= nx + nw + 10 && y >= ny - 10 && y <= ny + 30) {
-                    selectedNote = note;
-                    notes.forEach(n => n.selected = false);
-                    note.selected = true;
-                    isDragging = true;
-                    startX = x;
-                    noteStartPos = note.start;
-                    break;
+                    selectedNote = note; notes.forEach(n => n.selected = false); note.selected = true;
+                    isDragging = true; startX = x; noteStartPos = note.start; break;
                 }
             }
             draw();
@@ -181,33 +144,24 @@
             selectedNote.start = Math.max(0, noteStartPos + delta);
             draw();
         });
-
         canvas.addEventListener('touchend', () => { isDragging = false; });
 
         function moveNotes(amount) {
-            if (selectedNote) {
-                selectedNote.start = Math.max(0, selectedNote.start + amount);
-                draw();
-            }
+            if (selectedNote) { selectedNote.start = Math.max(0, selectedNote.start + amount); draw(); }
         }
 
         function formatTime(sec) {
-            let m = Math.floor(sec / 60);
-            let s = Math.floor(sec % 60);
+            let m = Math.floor(sec / 60); let s = Math.floor(sec % 60);
             return m + ":" + (s < 10 ? "0" : "") + s;
         }
 
         function save() {
             const data = {
-                notes: notes,
-                vol_inst: document.getElementById('vol-inst').value,
-                vol_bass: document.getElementById('vol-bass').value,
-                vol_kick: document.getElementById('vol-kick').value
+                notes: notes, vol_inst: document.getElementById('vol-inst').value,
+                vol_bass: document.getElementById('vol-bass').value, vol_kick: document.getElementById('vol-kick').value
             };
-            tg.sendData(JSON.stringify(data));
-            tg.close();
+            tg.sendData(JSON.stringify(data)); tg.close();
         }
-
         resize();
     </script>
 </body>
