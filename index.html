@@ -4,25 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Подключаем библиотеку для работы со звуком и волной -->
+    <script src="https://unpkg.com/wavesurfer.js@7"></script>
     <style>
         * { box-sizing: border-box; touch-action: none; }
-        body { margin: 0; background: #141414; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        body { margin: 0; background: #141414; color: white; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         
-        /* Верхняя панель */
         .header { display: flex; justify-content: space-between; padding: 10px; background: #1a1a1a; align-items: center; }
-        .time { color: #4a9eff; font-weight: bold; }
+        .time { color: #4a9eff; font-weight: bold; font-size: 14px; }
         
-        /* Канвас для нот */
-        .canvas-container { flex-grow: 1; position: relative; overflow-x: auto; overflow-y: hidden; background: #0d0d0d; }
-        canvas { display: block; height: 100%; }
+        /* Контейнер для волны и нот */
+        .editor-container { flex-grow: 1; position: relative; overflow: hidden; background: #0d0d0d; }
+        #waveform { position: absolute; top: 20px; left: 0; width: 100%; height: 100px; opacity: 0.4; }
+        #notes-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; }
         
-        /* Нижняя панель с ползунками */
-        .controls { background: #1a1a1a; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
-        .slider-row { display: flex; align-items: center; justify-content: space-between; font-size: 14px; color: #aaa; }
+        /* Нижняя панель */
+        .controls { background: #1a1a1a; padding: 10px; display: flex; flex-direction: column; gap: 5px; z-index: 20; }
+        .slider-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #aaa; }
         .slider-row input { width: 60%; accent-color: #3a8eef; }
         
-        /* Кнопки действий */
-        .actions { display: flex; gap: 10px; padding: 10px; background: #141414; }
+        .actions { display: flex; gap: 10px; padding: 10px; background: #141414; z-index: 20; }
         .btn { flex: 1; padding: 15px; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; color: white; }
         .btn-blue { background: #3a8eef; }
         .btn-green { background: #7ad07a; color: black; }
@@ -31,116 +32,136 @@
 </head>
 <body>
     <div class="header">
-        <span>Редактор нот</span>
+        <span>🎛 Low Bass Editor</span>
         <span class="time" id="timer">0:00 / 0:00</span>
     </div>
     
-    <div class="canvas-container" id="scroll-container">
-        <canvas id="editor"></canvas>
+    <div class="editor-container" id="editor-container">
+        <div id="waveform"></div>
+        <canvas id="notes-canvas"></canvas>
     </div>
 
     <div class="controls">
         <div class="slider-row">
             <span>Инструментал</span>
             <input type="range" id="vol-inst" min="0" max="200" value="100">
-            <span id="val-inst">100%</span>
         </div>
         <div class="slider-row">
             <span>Бас</span>
             <input type="range" id="vol-bass" min="-60" max="20" value="9">
-            <span id="val-bass">+9 dB</span>
         </div>
         <div class="slider-row">
             <span>Бочка</span>
             <input type="range" id="vol-kick" min="-60" max="20" value="-12">
-            <span id="val-kick">-12 dB</span>
         </div>
     </div>
 
     <div class="actions">
-        <button class="btn btn-gray" onclick="moveNotes(-0.01)">◀ Сдвиг</button>
-        <button class="btn btn-blue" onclick="moveNotes(0.01)">Сдвиг ▶</button>
+        <button class="btn btn-gray" onclick="moveNotes(-0.01)">◀</button>
+        <button class="btn btn-gray" onclick="togglePlay()" id="play-btn">▶ Play</button>
+        <button class="btn btn-gray" onclick="moveNotes(0.01)">▶</button>
         <button class="btn btn-green" onclick="save()">✓ Готово</button>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
-        tg.expand(); // На весь экран
+        tg.expand();
 
-        const canvas = document.getElementById('editor');
-        const ctx = canvas.getContext('2d');
-        const container = document.getElementById('scroll-container');
+        // Получаем данные из ссылки (бот передаст их)
+        const urlParams = new URLSearchParams(window.location.search);
+        const audioUrl = urlParams.get('audio') || "https://actions.google.com/sounds/v1/water/waves_crashing_on_rock_beach.ogg"; // Тестовый звук
+        const duration = parseFloat(urlParams.get('duration') || "30");
         
-        // Настройки
-        const PPS = 100; // Пикселей в секунду (зум)
-        let duration = 180; // Длительность трека (сек)
-        let selectedNote = null;
-        
-        // Тестовые данные (в реальности будут приходить из бота)
+        // В реальности ноты придут из бота (пока для теста)
         let notes = [
-            { start: 1.0, freq: 23, dur: 0.4 },
-            { start: 2.5, freq: 33, dur: 0.4 },
-            { start: 3.0, freq: 23, dur: 1.0 },
-            { start: 5.0, freq: 26, dur: 0.5 }
+            { start: 1.0, freq: 23, dur: 0.5, selected: false },
+            { start: 3.5, freq: 33, dur: 0.5, selected: false },
+            { start: 5.0, freq: 23, dur: 1.0, selected: false }
         ];
 
-        // Инициализация размера
-        canvas.width = duration * PPS;
-        canvas.height = container.clientHeight;
+        // Инициализация плеера
+        const wavesurfer = WaveSurfer.create({
+            container: '#waveform',
+            waveColor: '#3a8eef',
+            progressColor: '#ff4444',
+            height: 100,
+            barWidth: 2,
+            barGap: 1
+        });
+        wavesurfer.load(audioUrl);
 
-        function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // Рисуем сетку (секунды)
-            ctx.strokeStyle = '#333';
-            ctx.lineWidth = 1;
-            for (let i = 0; i <= duration; i++) {
-                let x = i * PPS;
-                ctx.beginPath();
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, canvas.height);
-                ctx.stroke();
-                if (i % 5 === 0) {
-                    ctx.fillStyle = '#666';
-                    ctx.fillText(i + 's', x + 5, 20);
-                }
-            }
-
-            // Рисуем ноты
-            notes.forEach((note, index) => {
-                let x = note.start * PPS;
-                let y = canvas.height - (note.freq - 15) * 3; // Располагаем по высоте
-                
-                // Цвет
-                ctx.fillStyle = (note === selectedNote) ? '#3a8eef' : '#7ad07a';
-                if (note.freq > 30) ctx.fillStyle = (note === selectedNote) ? '#3a8eef' : '#ffaa00'; // Акцентные
-                
-                ctx.fillRect(x, y, note.dur * PPS, 20);
-                
-                // Текст частоты
-                ctx.fillStyle = 'black';
-                ctx.font = '12px Arial';
-                ctx.fillText(note.freq + 'Hz', x + 5, y + 15);
-            });
-        }
-
-        // Обработка касаний (выбор и перетаскивание)
+        // Канвас для нот
+        const canvas = document.getElementById('notes-canvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('editor-container');
         let isDragging = false;
         let startX = 0;
         let noteStartPos = 0;
+        let selectedNote = null;
+        let currentPPS = 0; // Пикселей в секунду
 
+        function resize() {
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            currentPPS = canvas.width / duration;
+            draw();
+        }
+        window.addEventListener('resize', resize);
+
+        // Отрисовка нот
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Сетка (каждые 5 секунд)
+            ctx.strokeStyle = '#333';
+            for (let i = 0; i <= duration; i += 5) {
+                let x = i * currentPPS;
+                ctx.beginPath(); ctx.moveTo(x, 100); ctx.lineTo(x, canvas.height); ctx.stroke();
+            }
+
+            // Ноты
+            notes.forEach(note => {
+                let x = note.start * currentPPS;
+                let y = canvas.height - (note.freq - 15) * 4; 
+                let w = note.dur * currentPPS;
+
+                ctx.fillStyle = note.selected ? '#ffaa00' : (note.freq > 30 ? '#ffaa00' : '#7ad07a');
+                ctx.fillRect(x, y, Math.max(w, 10), 20); // Минимум 10px ширины для пальца
+                
+                ctx.fillStyle = 'black';
+                ctx.font = '10px Arial';
+                ctx.fillText(note.freq + 'Hz', x + 2, y + 14);
+            });
+        }
+
+        // Обновление таймера
+        wavesurfer.on('audioprocess', () => {
+            let time = wavesurfer.getCurrentTime();
+            document.getElementById('timer').innerText = formatTime(time) + ' / ' + formatTime(duration);
+        });
+
+        // Управление плеером
+        function togglePlay() {
+            wavesurfer.playPause();
+            document.getElementById('play-btn').innerText = wavesurfer.isPlaying() ? "⏸ Pause" : "▶ Play";
+        }
+
+        // Касания по нотам
         canvas.addEventListener('touchstart', (e) => {
             const rect = canvas.getBoundingClientRect();
-            const touch = e.touches[0];
-            const x = touch.clientX - rect.left;
-            const y = touch.clientY - rect.top;
+            const x = e.touches[0].clientX - rect.left;
+            const y = e.touches[0].clientY - rect.top;
 
             selectedNote = null;
             for (let note of notes) {
-                let nx = note.start * PPS;
-                let ny = canvas.height - (note.freq - 15) * 3;
-                if (x >= nx && x <= nx + (note.dur * PPS) && y >= ny && y <= ny + 20) {
+                let nx = note.start * currentPPS;
+                let ny = canvas.height - (note.freq - 15) * 4;
+                let nw = Math.max(note.dur * currentPPS, 15); // Учитываем мин. ширину
+                
+                if (x >= nx - 10 && x <= nx + nw + 10 && y >= ny - 10 && y <= ny + 30) {
                     selectedNote = note;
+                    notes.forEach(n => n.selected = false);
+                    note.selected = true;
                     isDragging = true;
                     startX = x;
                     noteStartPos = note.start;
@@ -153,17 +174,14 @@
         canvas.addEventListener('touchmove', (e) => {
             if (!isDragging || !selectedNote) return;
             const rect = canvas.getBoundingClientRect();
-            const touch = e.touches[0];
-            const x = touch.clientX - rect.left;
-            
-            let delta = (x - startX) / PPS;
+            const x = e.touches[0].clientX - rect.left;
+            let delta = (x - startX) / currentPPS;
             selectedNote.start = Math.max(0, noteStartPos + delta);
             draw();
         });
 
         canvas.addEventListener('touchend', () => { isDragging = false; });
 
-        // Кнопки сдвига (для точной настройки)
         function moveNotes(amount) {
             if (selectedNote) {
                 selectedNote.start = Math.max(0, selectedNote.start + amount);
@@ -171,13 +189,14 @@
             }
         }
 
-        // Обновление ползунков
-        document.getElementById('vol-inst').addEventListener('input', (e) => document.getElementById('val-inst').innerText = e.target.value + '%');
-        document.getElementById('vol-bass').addEventListener('input', (e) => document.getElementById('val-bass').innerText = e.target.value + ' dB');
-        document.getElementById('vol-kick').addEventListener('input', (e) => document.getElementById('val-kick').innerText = e.target.value + ' dB');
+        function formatTime(sec) {
+            let m = Math.floor(sec / 60);
+            let s = Math.floor(sec % 60);
+            return m + ":" + (s < 10 ? "0" : "") + s;
+        }
 
+        // Отправка данных боту
         function save() {
-            // Собираем данные и отправляем боту
             const data = {
                 notes: notes,
                 vol_inst: document.getElementById('vol-inst').value,
@@ -188,13 +207,7 @@
             tg.close();
         }
 
-        // Перерисовка при повороте экрана
-        window.addEventListener('resize', () => {
-            canvas.height = container.clientHeight;
-            draw();
-        });
-
-        draw();
+        resize();
     </script>
 </body>
 </html>
