@@ -11,7 +11,6 @@
         .header { display: flex; justify-content: space-between; padding: 10px; background: #1a1a1a; align-items: center; }
         .time { color: #4a9eff; font-weight: bold; font-size: 14px; }
         
-        /* Большой контейнер для скролла */
         .editor-container { flex-grow: 1; position: relative; overflow-x: auto; overflow-y: hidden; background: #0d0d0d; }
         #waveform { position: absolute; top: 50px; left: 0; height: 150px; }
         #notes-canvas { position: absolute; top: 0; left: 0; height: 100%; z-index: 10; }
@@ -64,19 +63,22 @@
         const audioUrl = urlParams.get('audio');
         const duration = parseFloat(urlParams.get('duration') || "30");
         
-        // Декодируем ноты из base64
+        // ДЕКОДИРОВАНИЕ БАЗЫ 64
         let notes = [];
         try {
             const notesB64 = urlParams.get('notes');
-            if (notesB64) notes = JSON.parse(atob(notesB64));
-        } catch(e) { console.error("Ошибка нот", e); }
+            if (notesB64) {
+                let base64Str = notesB64.replace(/-/g, '+').replace(/_/g, '/');
+                while (base64Str.length % 4) base64Str += '=';
+                notes = JSON.parse(atob(base64Str));
+            }
+        } catch(e) { console.error("Ошибка декодирования нот", e); }
 
-        const PPS = 100; // Пикселей в секунду
+        const PPS = 100;
         const canvas = document.getElementById('notes-canvas');
         const ctx = canvas.getContext('2d');
         const container = document.getElementById('editor-container');
         
-        // Инициализация волны (широкой)
         const wavesurfer = WaveSurfer.create({
             container: '#waveform',
             waveColor: '#3a8eef',
@@ -84,12 +86,11 @@
             height: 150,
             barWidth: 2,
             barGap: 1,
-            minPxPerSec: PPS // Заставляем волну быть широкой
+            minPxPerSec: PPS 
         });
 
         if (audioUrl) wavesurfer.load(audioUrl);
 
-        // Размеры канваса = длительность * PPS
         canvas.width = duration * PPS;
         canvas.height = container.clientHeight;
         document.getElementById('waveform').style.width = (duration * PPS) + 'px';
@@ -100,7 +101,6 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Сетка
             ctx.strokeStyle = '#333';
             for (let i = 0; i <= duration; i++) {
                 let x = i * PPS;
@@ -111,10 +111,9 @@
                 }
             }
 
-            // Ноты
             notes.forEach(note => {
                 let x = note.start * PPS;
-                let y = canvas.height - 100; // Высота нот
+                let y = canvas.height - 100;
                 let w = note.dur * PPS;
 
                 ctx.fillStyle = note.selected ? '#ffaa00' : (note.freq > 30 ? '#ffaa00' : '#7ad07a');
@@ -125,7 +124,6 @@
             });
         }
 
-        // Перетаскивание пальцем
         canvas.addEventListener('touchstart', (e) => {
             const rect = canvas.getBoundingClientRect();
             const x = e.touches[0].clientX - rect.left + container.scrollLeft;
@@ -161,7 +159,6 @@
 
         canvas.addEventListener('touchend', () => { isDragging = false; });
 
-        // Таймер
         wavesurfer.on('audioprocess', () => {
             let time = wavesurfer.getCurrentTime();
             document.getElementById('timer').innerText = formatTime(time) + ' / ' + formatTime(duration);
@@ -182,8 +179,7 @@
             tg.close();
         }
 
-        // Инициализация
-        setTimeout(draw, 500); // Ждем загрузки волны
+        setTimeout(draw, 500);
     </script>
 </body>
 </html>
