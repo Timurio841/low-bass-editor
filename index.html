@@ -10,16 +10,13 @@
         body { margin: 0; background: #141414; color: white; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         .header { display: flex; justify-content: space-between; padding: 10px; background: #1a1a1a; align-items: center; }
         .time { color: #4a9eff; font-weight: bold; font-size: 14px; }
-        
         .editor-container { flex-grow: 1; position: relative; overflow-x: auto; overflow-y: hidden; background: #0d0d0d; }
         #waveform { position: absolute; top: 50px; left: 0; height: 150px; }
         #notes-canvas { position: absolute; top: 0; left: 0; height: 100%; z-index: 10; }
-        
         .controls { background: #1a1a1a; padding: 10px; display: flex; flex-direction: column; gap: 5px; z-index: 20; }
         .slider-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #aaa; }
         .slider-row input { width: 50%; accent-color: #3a8eef; }
         .val { width: 50px; text-align: right; color: #fff; font-weight: bold; }
-        
         .actions { display: flex; gap: 10px; padding: 10px; background: #141414; z-index: 20; }
         .btn { flex: 1; padding: 15px; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; color: white; }
         .btn-green { background: #7ad07a; color: black; }
@@ -31,12 +28,10 @@
         <span>🎛 Low Bass Editor</span>
         <span class="time" id="timer">0:00 / 0:00</span>
     </div>
-    
     <div class="editor-container" id="editor-container">
         <div id="waveform"></div>
         <canvas id="notes-canvas"></canvas>
     </div>
-
     <div class="controls">
         <div class="slider-row">
             <span>Инструментал</span>
@@ -49,7 +44,6 @@
             <span class="val" id="val-bass">+9 dB</span>
         </div>
     </div>
-
     <div class="actions">
         <button class="btn btn-gray" onclick="tg.close()">Отмена</button>
         <button class="btn btn-green" onclick="save()">✓ Готово</button>
@@ -59,20 +53,30 @@
         const tg = window.Telegram.WebApp;
         tg.expand();
 
+        // ВСТАВЬ СВОИ ДАННЫЕ ИЗ SUPABASE
+        const SUPABASE_URL = "https://твой-проект.supabase.co";
+        const SUPABASE_KEY = "твой_publishable_key"; 
+
         const urlParams = new URLSearchParams(window.location.search);
         const audioUrl = urlParams.get('audio');
         const duration = parseFloat(urlParams.get('duration') || "30");
+        const jobId = urlParams.get('job_id');
         
-        // ДЕКОДИРОВАНИЕ БАЗЫ 64
         let notes = [];
-        try {
-            const notesB64 = urlParams.get('notes');
-            if (notesB64) {
-                let base64Str = notesB64.replace(/-/g, '+').replace(/_/g, '/');
-                while (base64Str.length % 4) base64Str += '=';
-                notes = JSON.parse(atob(base64Str));
-            }
-        } catch(e) { console.error("Ошибка декодирования нот", e); }
+
+        // Загружаем ноты из БД
+        if (jobId) {
+            fetch(`${SUPABASE_URL}/rest/v1/temp_notes?id=eq.${jobId}&select=notes`, {
+                headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data && data[0]) {
+                    notes = data[0].notes;
+                    draw();
+                }
+            });
+        }
 
         const PPS = 100;
         const canvas = document.getElementById('notes-canvas');
@@ -81,12 +85,8 @@
         
         const wavesurfer = WaveSurfer.create({
             container: '#waveform',
-            waveColor: '#3a8eef',
-            progressColor: '#ff4444',
-            height: 150,
-            barWidth: 2,
-            barGap: 1,
-            minPxPerSec: PPS 
+            waveColor: '#3a8eef', progressColor: '#ff4444',
+            height: 150, barWidth: 2, barGap: 1, minPxPerSec: PPS 
         });
 
         if (audioUrl) wavesurfer.load(audioUrl);
@@ -100,7 +100,6 @@
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
             ctx.strokeStyle = '#333';
             for (let i = 0; i <= duration; i++) {
                 let x = i * PPS;
@@ -115,10 +114,8 @@
                 let x = note.start * PPS;
                 let y = canvas.height - 100;
                 let w = note.dur * PPS;
-
                 ctx.fillStyle = note.selected ? '#ffaa00' : (note.freq > 30 ? '#ffaa00' : '#7ad07a');
                 ctx.fillRect(x, y, Math.max(w, 10), 20);
-                
                 ctx.fillStyle = 'black'; ctx.font = '12px Arial';
                 ctx.fillText(note.freq + 'Hz', x + 2, y + 15);
             });
