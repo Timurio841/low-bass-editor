@@ -103,7 +103,7 @@
             if (audioCtx.state === 'suspended') audioCtx.resume();
         }
 
-        // [FIX] Инициализируем сразу, чтобы слайдер баса работал без нажатия Play
+        // [FIX] инициализируем сразу — слайдер баса работает до нажатия Play
         initAudio();
 
         function scheduleBass(fromTime) {
@@ -387,7 +387,7 @@
         document.getElementById('vol-bass').addEventListener('input', (e) => {
             let val = parseFloat(e.target.value);
             document.getElementById('val-bass').innerText = val + ' dB';
-            initAudio(); // [FIX] гарантируем наличие bassGainNode
+            initAudio(); // [FIX] защита от null bassGainNode
             if (bassGainNode) {
                 let finalDb = 7.0 + val;
                 bassGainNode.gain.value = Math.pow(10, finalDb / 20);
@@ -413,7 +413,7 @@
 
             const data = {
                 job_id: jobId,
-                job_dir: jobDir, // [FIX] возвращаем путь к папке джобы в бота
+                job_dir: jobDir, // [FIX] возвращаем в бота
                 vol_inst: document.getElementById('vol-inst').value,
                 vol_bass: finalBassDb
             };
