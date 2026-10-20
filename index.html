@@ -77,13 +77,12 @@
         let selectedNotes = [];
         let dragStartPositions = {};
 
-        // === WEB AUDIO API ДЛЯ ПРЕДПРОСЛУШИВАНИЯ ===
+        // === WEB AUDIO API (ЗВУК ПРИ ТАПЕ) ===
         let audioCtx = null;
         function playNoteSound(freq) {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             if (audioCtx.state === 'suspended') audioCtx.resume();
             
-            // Берем частоту в 4 раза выше, чтобы телефонные динамики ее воспроизвели
             let playableFreq = freq * 4; 
             if (playableFreq < 60) playableFreq = 60; 
             
@@ -102,7 +101,7 @@
             osc.start();
             osc.stop(audioCtx.currentTime + 0.3);
         }
-        // =========================================
+        // =======================================
 
         if (jobId) {
             fetch(`${SUPABASE_URL}/rest/v1/temp_notes?id=eq.${jobId}&select=notes`, {
@@ -185,7 +184,7 @@
                 }
                 dragStartPositions = {};
                 selectedNotes.forEach(n => dragStartPositions[n] = n.start);
-                playNoteSound(clickedNote.freq); // ЗВУК ПРИ ТАПЕ
+                playNoteSound(clickedNote.freq); // ЗВУК
             } else {
                 selectedNotes = [];
             }
@@ -262,7 +261,7 @@
             if (selectedNotes.length === 0) return alert("Выберите ноту");
             selectedNotes.forEach(n => {
                 n.freq = Math.max(15, n.freq + delta);
-                playNoteSound(n.freq); // ЗВУК ПРИ ИЗМЕНЕНИИ ЧАСТОТЫ
+                playNoteSound(n.freq); // ЗВУК
             });
             draw();
         }
