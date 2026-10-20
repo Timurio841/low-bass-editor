@@ -10,21 +10,21 @@
         body { margin: 0; background: #141414; color: white; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         .header { display: flex; justify-content: space-between; padding: 10px; background: #1a1a1a; align-items: center; }
         .time { color: #4a9eff; font-weight: bold; font-size: 14px; }
-        
+
         .editor-container { flex-grow: 1; position: relative; overflow-x: auto; overflow-y: hidden; background: #0d0d0d; }
         #waveform { position: absolute; top: 50px; left: 0; height: 150px; }
         #notes-canvas { position: absolute; top: 0; left: 0; height: 100%; z-index: 10; }
-        
+
         #playhead {
             position: absolute; top: 0; bottom: 0; width: 2px; background: #ff4444;
             z-index: 15; display: none; pointer-events: none; box-shadow: 0 0 5px #ff4444;
         }
-        
+
         .controls { background: #1a1a1a; padding: 10px; display: flex; flex-direction: column; gap: 5px; z-index: 20; }
         .slider-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #aaa; }
         .slider-row input { width: 50%; accent-color: #3a8eef; }
         .val { width: 50px; text-align: right; color: #fff; font-weight: bold; }
-        
+
         .actions { display: flex; gap: 5px; padding: 10px; background: #141414; z-index: 20; flex-wrap: wrap; }
         .btn { flex: 1; min-width: 70px; padding: 12px 5px; border: none; border-radius: 8px; font-weight: bold; font-size: 14px; color: white; }
         .btn-green { background: #7ad07a; color: black; }
@@ -72,19 +72,21 @@
         tg.expand();
 
         const SUPABASE_URL = "https://nizngtkkmqqyhuyqhold.supabase.co";
-        const SUPABASE_KEY = "sb_publishable_ryrnxleq02WsQ7fcqPL3uw_dJqTXdos"; 
+        const SUPABASE_KEY = "sb_publishable_ryrnxleq02WsQ7fcqPL3uw_dJqTXdos";
 
         const urlParams = new URLSearchParams(window.location.search);
         const audioUrl = urlParams.get('audio');
         const instUrl = urlParams.get('inst');
         const duration = parseFloat(urlParams.get('duration') || "30");
         const jobId = urlParams.get('job_id');
-        
+        const jobDir = urlParams.get('job_dir'); // [FIX] путь к папке джобы
+
         let notes = [];
         let selectedNotes = [];
         let dragStartPositions = {};
         let isSynthMode = false;
 
+        // === WEB AUDIO API (БАС) ===
         let audioCtx = null;
         let bassGainNode = null;
         let scheduledNodes = [];
@@ -98,49 +100,53 @@
                 bassGainNode.connect(audioCtx.destination);
                 bassGainNode.gain.value = Math.pow(10, 7.0 / 20);
             }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
         }
+
+        // [FIX] Инициализируем сразу, чтобы слайдер баса работал без нажатия Play
+        initAudio();
 
         function scheduleBass(fromTime) {
             if (!isSynthMode || !audioCtx) return;
             scheduledNodes.forEach(n => { try { n.stop(); } catch(e){} });
             scheduledNodes = [];
-            
+
             let audioStartTime = audioCtx.currentTime;
-            
+
             notes.forEach(note => {
                 if (note.start + note.dur < fromTime) return;
-                
+
                 let actualStart = Math.max(note.start, fromTime);
                 let offset = actualStart - note.start;
                 let dur = note.dur - offset;
                 if (dur < 0.05) return;
 
                 let when = audioStartTime + (actualStart - fromTime);
-                
+
                 let osc = audioCtx.createOscillator();
                 let gain = audioCtx.createGain();
-                
+
                 osc.type = 'sine';
                 osc.frequency.value = note.freq;
-                
+
                 let attack = 0.01;
                 let release = 0.09;
                 let sustain = 0.55;
-                
+
                 gain.gain.setValueAtTime(0, when);
                 gain.gain.linearRampToValueAtTime(1, when + attack);
-                
+
                 let decayEnd = when + attack + 0.3 * dur;
                 if (decayEnd > when + dur - release) decayEnd = when + dur - release;
                 if (decayEnd < when + attack) decayEnd = when + attack;
-                
+
                 gain.gain.linearRampToValueAtTime(sustain, decayEnd);
                 gain.gain.setValueAtTime(sustain, when + dur - release);
                 gain.gain.linearRampToValueAtTime(0, when + dur);
-                
+
                 osc.connect(gain);
                 gain.connect(bassGainNode);
-                
+
                 osc.start(when);
                 osc.stop(when + dur);
                 scheduledNodes.push(osc);
@@ -156,8 +162,8 @@
             initAudio();
             if (!isSynthMode || !audioCtx) return;
             if (audioCtx.state === 'suspended') audioCtx.resume();
-            let playableFreq = freq * 4; 
-            if (playableFreq < 60) playableFreq = 60; 
+            let playableFreq = freq * 4;
+            if (playableFreq < 60) playableFreq = 60;
             let osc = audioCtx.createOscillator();
             let gain = audioCtx.createGain();
             osc.type = 'sine';
@@ -188,11 +194,11 @@
         const ctx = canvas.getContext('2d');
         const container = document.getElementById('editor-container');
         const playhead = document.getElementById('playhead');
-        
+
         const wavesurfer = WaveSurfer.create({
             container: '#waveform',
             waveColor: '#3a8eef', progressColor: 'transparent',
-            height: 150, barWidth: 2, barGap: 1, minPxPerSec: PPS 
+            height: 150, barWidth: 2, barGap: 1, minPxPerSec: PPS
         });
 
         if (instUrl) wavesurfer.load(instUrl);
@@ -238,7 +244,7 @@
                 let nx = note.start * PPS;
                 let ny = canvas.height - 100;
                 let nw = Math.max(note.dur * PPS, 15);
-                
+
                 if (x >= nx - 10 && x <= nx + nw + 10 && y >= ny - 20 && y <= ny + 40) {
                     clickedNote = note;
                     isDragging = true;
@@ -253,7 +259,7 @@
                 }
                 dragStartPositions = {};
                 selectedNotes.forEach(n => dragStartPositions[n] = n.start);
-                playNoteSound(clickedNote.freq); 
+                playNoteSound(clickedNote.freq);
             } else {
                 selectedNotes = [];
             }
@@ -265,7 +271,7 @@
             const rect = canvas.getBoundingClientRect();
             const x = e.touches[0].clientX - rect.left + container.scrollLeft;
             let delta = (x - startX) / PPS;
-            
+
             selectedNotes.forEach(n => {
                 n.start = Math.max(0, dragStartPositions[n] + delta);
             });
@@ -300,7 +306,7 @@
         wavesurfer.on('audioprocess', () => {
             let time = wavesurfer.getCurrentTime();
             document.getElementById('timer').innerText = formatTime(time) + ' / ' + formatTime(duration);
-            
+
             let currentX = time * PPS;
             playhead.style.left = currentX + 'px';
             playhead.style.display = 'block';
@@ -322,7 +328,7 @@
 
         wavesurfer.on('pause', () => { playhead.style.display = 'none'; stopBass(); });
         wavesurfer.on('finish', () => { playhead.style.display = 'none'; stopBass(); });
-        
+
         function formatTime(sec) {
             let m = Math.floor(sec / 60); let s = Math.floor(sec % 60);
             return m + ":" + (s < 10 ? "0" : "") + s;
@@ -335,7 +341,7 @@
             if (idx === -1) return;
             let halfDur = note.dur / 2;
             if (halfDur < 0.05) return alert("Нота слишком короткая");
-            
+
             let newNote = {start: note.start + halfDur, freq: note.freq, dur: halfDur};
             note.dur = halfDur;
             notes.splice(idx + 1, 0, newNote);
@@ -350,8 +356,8 @@
             let sorted = [...selectedNotes].sort((a,b) => a.start - b.start);
             let start = sorted[0].start;
             let end = sorted[sorted.length-1].start + sorted[sorted.length-1].dur;
-            let freq = sorted[0].freq; 
-            
+            let freq = sorted[0].freq;
+
             let newNote = {start: start, freq: freq, dur: end - start};
             notes = notes.filter(n => !selectedNotes.includes(n));
             notes.push(newNote);
@@ -381,15 +387,16 @@
         document.getElementById('vol-bass').addEventListener('input', (e) => {
             let val = parseFloat(e.target.value);
             document.getElementById('val-bass').innerText = val + ' dB';
-            if (isSynthMode) {
-                let finalDb = 7.0 + val; 
+            initAudio(); // [FIX] гарантируем наличие bassGainNode
+            if (bassGainNode) {
+                let finalDb = 7.0 + val;
                 bassGainNode.gain.value = Math.pow(10, finalDb / 20);
             }
         });
 
         async function save() {
             let sliderBass = parseFloat(document.getElementById('vol-bass').value);
-            let finalBassDb = 7.0 + sliderBass; 
+            let finalBassDb = 7.0 + sliderBass;
 
             try {
                 await fetch(`${SUPABASE_URL}/rest/v1/temp_notes?id=eq.${jobId}`, {
@@ -406,6 +413,7 @@
 
             const data = {
                 job_id: jobId,
+                job_dir: jobDir, // [FIX] возвращаем путь к папке джобы в бота
                 vol_inst: document.getElementById('vol-inst').value,
                 vol_bass: finalBassDb
             };
