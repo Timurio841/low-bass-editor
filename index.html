@@ -20,11 +20,12 @@
         .slider-row input { width: 50%; accent-color: #3a8eef; }
         .val { width: 50px; text-align: right; color: #fff; font-weight: bold; }
         
-        .actions { display: flex; gap: 10px; padding: 10px; background: #141414; z-index: 20; }
-        .btn { flex: 1; padding: 15px; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; color: white; }
+        .actions { display: flex; gap: 5px; padding: 10px; background: #141414; z-index: 20; flex-wrap: wrap; }
+        .btn { flex: 1; min-width: 70px; padding: 12px 5px; border: none; border-radius: 8px; font-weight: bold; font-size: 14px; color: white; }
         .btn-green { background: #7ad07a; color: black; }
         .btn-gray { background: #333; }
         .btn-blue { background: #3a8eef; }
+        .btn-orange { background: #ffaa00; color: black; }
     </style>
 </head>
 <body>
@@ -53,6 +54,12 @@
         <button class="btn btn-blue" onclick="togglePlay()" id="play-btn">▶ Play</button>
         <button class="btn btn-green" onclick="save()">✓ Готово</button>
     </div>
+    <div class="actions">
+        <button class="btn btn-gray" onclick="splitNote()">✂ Разделить</button>
+        <button class="btn btn-gray" onclick="joinNotes()">🔗 Объединить</button>
+        <button class="btn btn-orange" onclick="changeFreq(-1)">- Частота</button>
+        <button class="btn btn-orange" onclick="changeFreq(1)">+ Частота</button>
+    </div>
 
     <script>
         const tg = window.Telegram.WebApp;
@@ -67,6 +74,8 @@
         const jobId = urlParams.get('job_id');
         
         let notes = [];
+        let selectedNotes = [];
+        let dragStartPositions = {};
 
         if (jobId) {
             fetch(`${SUPABASE_URL}/rest/v1/temp_notes?id=eq.${jobId}&select=notes`, {
@@ -78,8 +87,7 @@
                     notes = data[0].notes;
                     draw();
                 }
-            })
-            .catch(err => console.error("Ошибка нот:", err));
+            });
         }
 
         const PPS = 100;
@@ -99,8 +107,7 @@
         canvas.height = container.clientHeight;
         document.getElementById('waveform').style.width = (duration * PPS) + 'px';
 
-        let selectedNote = null;
-        let isDragging = false, startX = 0, noteStartPos = 0;
+        let isDragging = false, startX = 0;
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -118,7 +125,8 @@
                 let x = note.start * PPS;
                 let y = canvas.height - 100;
                 let w = note.dur * PPS;
-                ctx.fillStyle = note.selected ? '#ffaa00' : (note.freq > 30 ? '#ffaa00' : '#7ad07a');
+                let isSel = selectedNotes.includes(note);
+                ctx.fillStyle = isSel ? '#ffaa00' : (note.freq > 30 ? '#ff9900' : '#7ad07a');
                 ctx.fillRect(x, y, Math.max(w, 10), 20);
                 ctx.fillStyle = 'black'; ctx.font = '12px Arial';
                 ctx.fillText(note.freq + 'Hz', x + 2, y + 15);
@@ -130,31 +138,42 @@
             const x = e.touches[0].clientX - rect.left + container.scrollLeft;
             const y = e.touches[0].clientY - rect.top;
 
-            selectedNote = null;
+            let clickedNote = null;
             for (let note of notes) {
                 let nx = note.start * PPS;
                 let ny = canvas.height - 100;
                 let nw = Math.max(note.dur * PPS, 15);
                 
                 if (x >= nx - 10 && x <= nx + nw + 10 && y >= ny - 20 && y <= ny + 40) {
-                    selectedNote = note;
-                    notes.forEach(n => n.selected = false);
-                    note.selected = true;
+                    clickedNote = note;
                     isDragging = true;
                     startX = x;
-                    noteStartPos = note.start;
                     break;
                 }
+            }
+
+            if (clickedNote) {
+                if (!selectedNotes.includes(clickedNote)) {
+                    selectedNotes = [clickedNote];
+                }
+                // Запоминаем стартовые позиции для перетаскивания
+                dragStartPositions = {};
+                selectedNotes.forEach(n => dragStartPositions[n] = n.start);
+            } else {
+                selectedNotes = [];
             }
             draw();
         });
 
         canvas.addEventListener('touchmove', (e) => {
-            if (!isDragging || !selectedNote) return;
+            if (!isDragging || selectedNotes.length === 0) return;
             const rect = canvas.getBoundingClientRect();
             const x = e.touches[0].clientX - rect.left + container.scrollLeft;
             let delta = (x - startX) / PPS;
-            selectedNote.start = Math.max(0, noteStartPos + delta);
+            
+            selectedNotes.forEach(n => {
+                n.start = Math.max(0, dragStartPositions[n] + delta);
+            });
             draw();
         });
 
@@ -165,15 +184,12 @@
             document.getElementById('play-btn').innerText = wavesurfer.isPlaying() ? "⏸ Pause" : "▶ Play";
         }
 
-        // === АВТОСКРОЛЛ ЗА ВОЛНОЙ ===
         wavesurfer.on('audioprocess', () => {
             let time = wavesurfer.getCurrentTime();
             document.getElementById('timer').innerText = formatTime(time) + ' / ' + formatTime(duration);
             
-            // Двигаем полосу прокрутки за плейхедом
             let currentX = time * PPS;
             let w = container.clientWidth;
-            // Оставляем плейхед по центру экрана
             if (currentX > w / 2) {
                 container.scrollLeft = currentX - (w / 2);
             }
@@ -182,6 +198,45 @@
         function formatTime(sec) {
             let m = Math.floor(sec / 60); let s = Math.floor(sec % 60);
             return m + ":" + (s < 10 ? "0" : "") + s;
+        }
+
+        function splitNote() {
+            if (selectedNotes.length !== 1) return alert("Выберите одну ноту для разделения");
+            let note = selectedNotes[0];
+            let idx = notes.indexOf(note);
+            if (idx === -1) return;
+            
+            let halfDur = note.dur / 2;
+            if (halfDur < 0.05) return alert("Нота слишком короткая");
+            
+            let newNote = {start: note.start + halfDur, freq: note.freq, dur: halfDur};
+            note.dur = halfDur;
+            notes.splice(idx + 1, 0, newNote);
+            selectedNotes = [];
+            draw();
+        }
+
+        function joinNotes() {
+            if (selectedNotes.length < 2) return alert("Выберите 2 или более нот для объединения");
+            let sorted = [...selectedNotes].sort((a,b) => a.start - b.start);
+            let start = sorted[0].start;
+            let end = sorted[sorted.length-1].start + sorted[sorted.length-1].dur;
+            let freq = sorted[0].freq; 
+            
+            let newNote = {start: start, freq: freq, dur: end - start};
+            notes = notes.filter(n => !selectedNotes.includes(n));
+            notes.push(newNote);
+            notes.sort((a,b) => a.start - b.start);
+            selectedNotes = [];
+            draw();
+        }
+
+        function changeFreq(delta) {
+            if (selectedNotes.length === 0) return alert("Выберите ноту");
+            selectedNotes.forEach(n => {
+                n.freq = Math.max(15, n.freq + delta);
+            });
+            draw();
         }
 
         function save() {
