@@ -10,13 +10,17 @@
         body { margin: 0; background: #141414; color: white; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         .header { display: flex; justify-content: space-between; padding: 10px; background: #1a1a1a; align-items: center; }
         .time { color: #4a9eff; font-weight: bold; font-size: 14px; }
+        
+        /* Большой контейнер для волны, который можно скроллить */
         .editor-container { flex-grow: 1; position: relative; overflow-x: auto; overflow-y: hidden; background: #0d0d0d; }
         #waveform { position: absolute; top: 50px; left: 0; height: 150px; }
         #notes-canvas { position: absolute; top: 0; left: 0; height: 100%; z-index: 10; }
+        
         .controls { background: #1a1a1a; padding: 10px; display: flex; flex-direction: column; gap: 5px; z-index: 20; }
         .slider-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #aaa; }
         .slider-row input { width: 50%; accent-color: #3a8eef; }
         .val { width: 50px; text-align: right; color: #fff; font-weight: bold; }
+        
         .actions { display: flex; gap: 10px; padding: 10px; background: #141414; z-index: 20; }
         .btn { flex: 1; padding: 15px; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; color: white; }
         .btn-green { background: #7ad07a; color: black; }
@@ -29,10 +33,12 @@
         <span>🎛 Low Bass Editor</span>
         <span class="time" id="timer">0:00 / 0:00</span>
     </div>
+    
     <div class="editor-container" id="editor-container">
         <div id="waveform"></div>
         <canvas id="notes-canvas"></canvas>
     </div>
+
     <div class="controls">
         <div class="slider-row">
             <span>Инструментал</span>
@@ -41,11 +47,12 @@
         </div>
         <div class="slider-row">
             <span>Бас</span>
-            <!-- По умолчанию 0, но в коде прибавляем +7 -->
+            <!-- Ползунок показывает от -10 до +10, по умолчанию 0 -->
             <input type="range" id="vol-bass" min="-10" max="10" value="0" oninput="document.getElementById('val-bass').innerText=this.value+' dB'">
             <span class="val" id="val-bass">0 dB</span>
         </div>
     </div>
+
     <div class="actions">
         <button class="btn btn-gray" onclick="tg.close()">Отмена</button>
         <button class="btn btn-blue" onclick="togglePlay()" id="play-btn">▶ Play</button>
@@ -56,8 +63,9 @@
         const tg = window.Telegram.WebApp;
         tg.expand();
 
+        // === ТВОИ ДАННЫЕ ИЗ SUPABASE (ПУБЛИЧНЫЙ КЛЮЧ) ===
         const SUPABASE_URL = "https://nizngtkkmqqyhuyqhold.supabase.co";
-        const SUPABASE_KEY = "sb_secret_CDbdAiNSMR1P4I6v-A9Abw_y9-zoWd7"; 
+        const SUPABASE_KEY = "sb_publishable_ryrnxleq02WsQ7fcqPL3uw_dJqTXdos"; 
 
         const urlParams = new URLSearchParams(window.location.search);
         const audioUrl = urlParams.get('audio');
@@ -66,6 +74,7 @@
         
         let notes = [];
 
+        // Загружаем ноты из БД
         if (jobId) {
             fetch(`${SUPABASE_URL}/rest/v1/temp_notes?id=eq.${jobId}&select=notes`, {
                 headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
@@ -76,14 +85,16 @@
                     notes = data[0].notes;
                     draw();
                 }
-            });
+            })
+            .catch(err => console.error("Ошибка загрузки нот:", err));
         }
 
-        const PPS = 100;
+        const PPS = 100; // Пикселей в секунду
         const canvas = document.getElementById('notes-canvas');
         const ctx = canvas.getContext('2d');
         const container = document.getElementById('editor-container');
         
+        // Инициализация плеера (волна)
         const wavesurfer = WaveSurfer.create({
             container: '#waveform',
             waveColor: '#3a8eef', progressColor: '#ff4444',
@@ -99,8 +110,11 @@
         let selectedNote = null;
         let isDragging = false, startX = 0, noteStartPos = 0;
 
+        // Отрисовка сетки и нот
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Сетка по секундам
             ctx.strokeStyle = '#333';
             for (let i = 0; i <= duration; i++) {
                 let x = i * PPS;
@@ -111,6 +125,7 @@
                 }
             }
 
+            // Ноты
             notes.forEach(note => {
                 let x = note.start * PPS;
                 let y = canvas.height - 100;
@@ -122,6 +137,7 @@
             });
         }
 
+        // Перетаскивание нот пальцем
         canvas.addEventListener('touchstart', (e) => {
             const rect = canvas.getBoundingClientRect();
             const x = e.touches[0].clientX - rect.left + container.scrollLeft;
@@ -157,11 +173,13 @@
 
         canvas.addEventListener('touchend', () => { isDragging = false; });
 
+        // Кнопка Play
         function togglePlay() {
             wavesurfer.playPause();
             document.getElementById('play-btn').innerText = wavesurfer.isPlaying() ? "⏸ Pause" : "▶ Play";
         }
 
+        // Таймер
         wavesurfer.on('audioprocess', () => {
             let time = wavesurfer.getCurrentTime();
             document.getElementById('timer').innerText = formatTime(time) + ' / ' + formatTime(duration);
@@ -172,10 +190,10 @@
             return m + ":" + (s < 10 ? "0" : "") + s;
         }
 
+        // Сохранение и отправка боту
         function save() {
-            // Берем значение с ползунка (по умолчанию 0)
             let sliderBass = parseFloat(document.getElementById('vol-bass').value);
-            // Прибавляем +7 дБ (как в main.py)
+            // Визуально 0, но технически прибавляем +7 дБ для жира
             let finalBassDb = 7.0 + sliderBass; 
 
             const data = {
