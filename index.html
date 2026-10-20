@@ -15,6 +15,11 @@
         #waveform { position: absolute; top: 50px; left: 0; height: 150px; }
         #notes-canvas { position: absolute; top: 0; left: 0; height: 100%; z-index: 10; }
         
+        #playhead {
+            position: absolute; top: 0; bottom: 0; width: 2px; background: #ff4444;
+            z-index: 15; display: none; pointer-events: none; box-shadow: 0 0 5px #ff4444;
+        }
+        
         .controls { background: #1a1a1a; padding: 10px; display: flex; flex-direction: column; gap: 5px; z-index: 20; }
         .slider-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #aaa; }
         .slider-row input { width: 50%; accent-color: #3a8eef; }
@@ -36,16 +41,17 @@
     <div class="editor-container" id="editor-container">
         <div id="waveform"></div>
         <canvas id="notes-canvas"></canvas>
+        <div id="playhead"></div>
     </div>
     <div class="controls">
         <div class="slider-row">
             <span>Инструментал</span>
-            <input type="range" id="vol-inst" min="0" max="200" value="100" oninput="document.getElementById('val-inst').innerText=this.value+'%'">
+            <input type="range" id="vol-inst" min="0" max="200" value="100">
             <span class="val" id="val-inst">100%</span>
         </div>
         <div class="slider-row">
             <span>Бас</span>
-            <input type="range" id="vol-bass" min="-10" max="10" value="0" oninput="document.getElementById('val-bass').innerText=this.value+' dB'">
+            <input type="range" id="vol-bass" min="-10" max="10" value="0">
             <span class="val" id="val-bass">0 dB</span>
         </div>
     </div>
@@ -70,36 +76,99 @@
 
         const urlParams = new URLSearchParams(window.location.search);
         const audioUrl = urlParams.get('audio');
+        const instUrl = urlParams.get('inst'); // Инструментал для Web Audio API
         const duration = parseFloat(urlParams.get('duration') || "30");
         const jobId = urlParams.get('job_id');
         
         let notes = [];
         let selectedNotes = [];
         let dragStartPositions = {};
+        let isSynthMode = false;
 
+        // === WEB AUDIO API (БАС) ===
         let audioCtx = null;
-        function playNoteSound(freq) {
-            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            if (audioCtx.state === 'suspended') audioCtx.resume();
+        let bassGainNode = null;
+        let scheduledNodes = [];
+
+        if (instUrl) {
+            isSynthMode = true;
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            bassGainNode = audioCtx.createGain();
+            bassGainNode.connect(audioCtx.destination);
+            // Базовая громкость +7 дБ (как в main.py)
+            bassGainNode.gain.value = Math.pow(10, 7.0 / 20);
+        }
+
+        function scheduleBass(fromTime) {
+            if (!isSynthMode) return;
+            scheduledNodes.forEach(n => { try { n.stop(); } catch(e){} });
+            scheduledNodes = [];
             
+            let audioStartTime = audioCtx.currentTime;
+            
+            notes.forEach(note => {
+                if (note.start + note.dur < fromTime) return; // Уже проиграно
+                
+                let actualStart = Math.max(note.start, fromTime);
+                let offset = actualStart - note.start;
+                let dur = note.dur - offset;
+                if (dur < 0.05) return;
+
+                let when = audioStartTime + (actualStart - fromTime);
+                
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                
+                osc.type = 'sine';
+                osc.frequency.value = note.freq;
+                
+                // Огибающая из main.py
+                let attack = 0.01;
+                let release = 0.09;
+                let sustain = 0.55;
+                
+                gain.gain.setValueAtTime(0, when);
+                gain.gain.linearRampToValueAtTime(1, when + attack);
+                
+                let decayEnd = when + attack + 0.3 * dur;
+                if (decayEnd > when + dur - release) decayEnd = when + dur - release;
+                if (decayEnd < when + attack) decayEnd = when + attack;
+                
+                gain.gain.linearRampToValueAtTime(sustain, decayEnd);
+                gain.gain.setValueAtTime(sustain, when + dur - release);
+                gain.gain.linearRampToValueAtTime(0, when + dur);
+                
+                osc.connect(gain);
+                gain.connect(bassGainNode);
+                
+                osc.start(when);
+                osc.stop(when + dur);
+                scheduledNodes.push(osc);
+            });
+        }
+
+        function stopBass() {
+            scheduledNodes.forEach(n => { try { n.stop(); } catch(e){} });
+            scheduledNodes = [];
+        }
+
+        function playNoteSound(freq) {
+            if (!isSynthMode) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
             let playableFreq = freq * 4; 
             if (playableFreq < 60) playableFreq = 60; 
-            
             let osc = audioCtx.createOscillator();
             let gain = audioCtx.createGain();
-            
             osc.type = 'sine';
             osc.frequency.value = playableFreq;
-            
             gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
-            
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
             osc.connect(gain);
             gain.connect(audioCtx.destination);
-            
             osc.start();
-            osc.stop(audioCtx.currentTime + 0.3);
+            osc.stop(audioCtx.currentTime + 0.2);
         }
+        // =========================================
 
         if (jobId) {
             fetch(`${SUPABASE_URL}/rest/v1/temp_notes?id=eq.${jobId}&select=notes`, {
@@ -118,14 +187,17 @@
         const canvas = document.getElementById('notes-canvas');
         const ctx = canvas.getContext('2d');
         const container = document.getElementById('editor-container');
+        const playhead = document.getElementById('playhead');
         
+        // Загружаем инструментал (или готовый трек, если синтез не удался)
         const wavesurfer = WaveSurfer.create({
             container: '#waveform',
-            waveColor: '#3a8eef', progressColor: '#ff4444',
+            waveColor: '#3a8eef', progressColor: 'transparent',
             height: 150, barWidth: 2, barGap: 1, minPxPerSec: PPS 
         });
 
-        if (audioUrl) wavesurfer.load(audioUrl);
+        if (instUrl) wavesurfer.load(instUrl);
+        else if (audioUrl) wavesurfer.load(audioUrl);
 
         canvas.width = duration * PPS;
         canvas.height = container.clientHeight;
@@ -199,13 +271,30 @@
                 n.start = Math.max(0, dragStartPositions[n] + delta);
             });
             draw();
+            rescheduleIfPlaying();
         });
 
         canvas.addEventListener('touchend', () => { isDragging = false; });
 
         function togglePlay() {
-            wavesurfer.playPause();
+            if (!audioCtx) { alert("Аудио контекст не инициализирован"); return; }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            if (wavesurfer.isPlaying()) {
+                wavesurfer.pause();
+                stopBass();
+            } else {
+                wavesurfer.play();
+                scheduleBass(wavesurfer.getCurrentTime());
+            }
             document.getElementById('play-btn').innerText = wavesurfer.isPlaying() ? "⏸ Pause" : "▶ Play";
+        }
+
+        function rescheduleIfPlaying() {
+            if (isSynthMode && wavesurfer.isPlaying()) {
+                stopBass();
+                scheduleBass(wavesurfer.getCurrentTime());
+            }
         }
 
         wavesurfer.on('audioprocess', () => {
@@ -213,11 +302,26 @@
             document.getElementById('timer').innerText = formatTime(time) + ' / ' + formatTime(duration);
             
             let currentX = time * PPS;
+            playhead.style.left = currentX + 'px';
+            playhead.style.display = 'block';
+
             let w = container.clientWidth;
             if (currentX > w / 2) {
                 container.scrollLeft = currentX - (w / 2);
             }
         });
+
+        wavesurfer.on('seek', () => {
+            let time = wavesurfer.getCurrentTime();
+            let currentX = time * PPS;
+            playhead.style.left = currentX + 'px';
+            if (wavesurfer.isPlaying()) {
+                scheduleBass(time);
+            }
+        });
+
+        wavesurfer.on('pause', () => { playhead.style.display = 'none'; stopBass(); });
+        wavesurfer.on('finish', () => { playhead.style.display = 'none'; stopBass(); });
         
         function formatTime(sec) {
             let m = Math.floor(sec / 60); let s = Math.floor(sec % 60);
@@ -225,11 +329,10 @@
         }
 
         function splitNote() {
-            if (selectedNotes.length !== 1) return alert("Выберите одну ноту для разделения");
+            if (selectedNotes.length !== 1) return alert("Выберите одну ноту");
             let note = selectedNotes[0];
             let idx = notes.indexOf(note);
             if (idx === -1) return;
-            
             let halfDur = note.dur / 2;
             if (halfDur < 0.05) return alert("Нота слишком короткая");
             
@@ -238,10 +341,12 @@
             notes.splice(idx + 1, 0, newNote);
             selectedNotes = [];
             draw();
+            playNoteSound(note.freq);
+            rescheduleIfPlaying();
         }
 
         function joinNotes() {
-            if (selectedNotes.length < 2) return alert("Выберите 2 или более нот для объединения");
+            if (selectedNotes.length < 2) return alert("Выберите 2 или более нот");
             let sorted = [...selectedNotes].sort((a,b) => a.start - b.start);
             let start = sorted[0].start;
             let end = sorted[sorted.length-1].start + sorted[sorted.length-1].dur;
@@ -253,6 +358,8 @@
             notes.sort((a,b) => a.start - b.start);
             selectedNotes = [];
             draw();
+            playNoteSound(newNote.freq);
+            rescheduleIfPlaying();
         }
 
         function changeFreq(delta) {
@@ -262,14 +369,44 @@
                 playNoteSound(n.freq);
             });
             draw();
+            rescheduleIfPlaying();
         }
 
-        function save() {
+        // === НАСТРОЙКА ГРОМКОСТИ В РЕАЛЬНОМ ВРЕМЕНИ ===
+        document.getElementById('vol-inst').addEventListener('input', (e) => {
+            let val = e.target.value;
+            document.getElementById('val-inst').innerText = val + '%';
+            wavesurfer.setVolume(val / 100);
+        });
+
+        document.getElementById('vol-bass').addEventListener('input', (e) => {
+            let val = parseFloat(e.target.value);
+            document.getElementById('val-bass').innerText = val + ' dB';
+            if (isSynthMode) {
+                let finalDb = 7.0 + val; 
+                bassGainNode.gain.value = Math.pow(10, finalDb / 20);
+            }
+        });
+
+        async function save() {
             let sliderBass = parseFloat(document.getElementById('vol-bass').value);
             let finalBassDb = 7.0 + sliderBass; 
 
+            try {
+                await fetch(`${SUPABASE_URL}/rest/v1/temp_notes?id=eq.${jobId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'apikey': SUPABASE_KEY,
+                        'Authorization': `Bearer ${SUPABASE_KEY}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=minimal'
+                    },
+                    body: JSON.stringify({ notes: notes })
+                });
+            } catch(e) { console.error(e); }
+
             const data = {
-                notes: notes.map(n => ({start: n.start, freq: n.freq, dur: n.dur})),
+                job_id: jobId,
                 vol_inst: document.getElementById('vol-inst').value,
                 vol_bass: finalBassDb
             };
