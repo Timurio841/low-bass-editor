@@ -156,7 +156,6 @@
                 if (!selectedNotes.includes(clickedNote)) {
                     selectedNotes = [clickedNote];
                 }
-                // Запоминаем стартовые позиции для перетаскивания
                 dragStartPositions = {};
                 selectedNotes.forEach(n => dragStartPositions[n] = n.start);
             } else {
