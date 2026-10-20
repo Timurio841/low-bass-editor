@@ -76,7 +76,7 @@
 
         const urlParams = new URLSearchParams(window.location.search);
         const audioUrl = urlParams.get('audio');
-        const instUrl = urlParams.get('inst'); // Инструментал для Web Audio API
+        const instUrl = urlParams.get('inst');
         const duration = parseFloat(urlParams.get('duration') || "30");
         const jobId = urlParams.get('job_id');
         
@@ -85,29 +85,30 @@
         let dragStartPositions = {};
         let isSynthMode = false;
 
-        // === WEB AUDIO API (БАС) ===
         let audioCtx = null;
         let bassGainNode = null;
         let scheduledNodes = [];
 
-        if (instUrl) {
+        function initAudio() {
+            if (!instUrl) return;
             isSynthMode = true;
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            bassGainNode = audioCtx.createGain();
-            bassGainNode.connect(audioCtx.destination);
-            // Базовая громкость +7 дБ (как в main.py)
-            bassGainNode.gain.value = Math.pow(10, 7.0 / 20);
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                bassGainNode = audioCtx.createGain();
+                bassGainNode.connect(audioCtx.destination);
+                bassGainNode.gain.value = Math.pow(10, 7.0 / 20);
+            }
         }
 
         function scheduleBass(fromTime) {
-            if (!isSynthMode) return;
+            if (!isSynthMode || !audioCtx) return;
             scheduledNodes.forEach(n => { try { n.stop(); } catch(e){} });
             scheduledNodes = [];
             
             let audioStartTime = audioCtx.currentTime;
             
             notes.forEach(note => {
-                if (note.start + note.dur < fromTime) return; // Уже проиграно
+                if (note.start + note.dur < fromTime) return;
                 
                 let actualStart = Math.max(note.start, fromTime);
                 let offset = actualStart - note.start;
@@ -122,7 +123,6 @@
                 osc.type = 'sine';
                 osc.frequency.value = note.freq;
                 
-                // Огибающая из main.py
                 let attack = 0.01;
                 let release = 0.09;
                 let sustain = 0.55;
@@ -153,7 +153,8 @@
         }
 
         function playNoteSound(freq) {
-            if (!isSynthMode) return;
+            initAudio();
+            if (!isSynthMode || !audioCtx) return;
             if (audioCtx.state === 'suspended') audioCtx.resume();
             let playableFreq = freq * 4; 
             if (playableFreq < 60) playableFreq = 60; 
@@ -168,7 +169,6 @@
             osc.start();
             osc.stop(audioCtx.currentTime + 0.2);
         }
-        // =========================================
 
         if (jobId) {
             fetch(`${SUPABASE_URL}/rest/v1/temp_notes?id=eq.${jobId}&select=notes`, {
@@ -189,7 +189,6 @@
         const container = document.getElementById('editor-container');
         const playhead = document.getElementById('playhead');
         
-        // Загружаем инструментал (или готовый трек, если синтез не удался)
         const wavesurfer = WaveSurfer.create({
             container: '#waveform',
             waveColor: '#3a8eef', progressColor: 'transparent',
@@ -277,6 +276,7 @@
         canvas.addEventListener('touchend', () => { isDragging = false; });
 
         function togglePlay() {
+            initAudio();
             if (!audioCtx) { alert("Аудио контекст не инициализирован"); return; }
             if (audioCtx.state === 'suspended') audioCtx.resume();
 
@@ -372,7 +372,6 @@
             rescheduleIfPlaying();
         }
 
-        // === НАСТРОЙКА ГРОМКОСТИ В РЕАЛЬНОМ ВРЕМЕНИ ===
         document.getElementById('vol-inst').addEventListener('input', (e) => {
             let val = e.target.value;
             document.getElementById('val-inst').innerText = val + '%';
