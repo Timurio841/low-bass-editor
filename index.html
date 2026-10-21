@@ -79,7 +79,9 @@
         const instUrl = urlParams.get('inst');
         const duration = parseFloat(urlParams.get('duration') || "30");
         const jobId = urlParams.get('job_id');
-        const jobDir = urlParams.get('job_dir'); // [FIX] путь к папке джобы
+        const jobDir = urlParams.get('job_dir');
+        const mainHz = parseFloat(urlParams.get('main_hz') || "0");
+        const accentHz = parseFloat(urlParams.get('accent_hz') || "0");
 
         let notes = [];
         let selectedNotes = [];
@@ -88,74 +90,146 @@
 
         // === WEB AUDIO API (БАС) ===
         let audioCtx = null;
+        let bassBus = null;
         let bassGainNode = null;
         let scheduledNodes = [];
+        let scheduledKicks = [];
 
+        // Soft-clip для лимитера (заменяет жёсткий клиппинг Web Audio)
+        function makeSoftClipCurve(amount) {
+            const n = 2048;
+            const curve = new Float32Array(n);
+            for (let i = 0; i < n; i++) {
+                const x = (i * 2 / (n - 1)) - 1;
+                curve[i] = Math.tanh(x * amount);
+            }
+            return curve;
+        }
+
+        // Цепочка как в processor.py:
+        //   osc → envGain → bassBus → HPF(20) → Compressor(-12, 3) → masterGain(+7дБ) → softLimiter → dest
         function initAudio() {
             if (!instUrl) return;
             isSynthMode = true;
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+                bassBus = audioCtx.createGain();
+                bassBus.gain.value = 1.0;
+
+                const hp = audioCtx.createBiquadFilter();
+                hp.type = 'highpass';
+                hp.frequency.value = 20;
+                hp.Q.value = 0.7;
+
+                const comp = audioCtx.createDynamicsCompressor();
+                comp.threshold.value = -12;
+                comp.knee.value = 6;
+                comp.ratio.value = 3;
+                comp.attack.value = 0.003;
+                comp.release.value = 0.25;
+
                 bassGainNode = audioCtx.createGain();
-                bassGainNode.connect(audioCtx.destination);
                 bassGainNode.gain.value = Math.pow(10, 7.0 / 20);
+
+                const limiter = audioCtx.createWaveShaper();
+                limiter.curve = makeSoftClipCurve(1.2);
+                limiter.oversample = '4x';
+
+                bassBus.connect(hp);
+                hp.connect(comp);
+                comp.connect(bassGainNode);
+                bassGainNode.connect(limiter);
+                limiter.connect(audioCtx.destination);
             }
             if (audioCtx.state === 'suspended') audioCtx.resume();
         }
 
-        // [FIX] инициализируем сразу — слайдер баса работает до нажатия Play
         initAudio();
+
+        // Огибающая идентична make_envelope в processor.py:
+        // attack=3мс, decay до 0.55 за 0.3*dur, sustain=0.55, release=80мс
+        function applyEnvelope(gainNode, when, dur) {
+            const attack = 0.003;
+            const release = 0.08;
+            const sustain = 0.55;
+
+            gainNode.gain.setValueAtTime(0, when);
+            gainNode.gain.linearRampToValueAtTime(1, when + attack);
+
+            let decayEnd = when + attack + 0.3 * dur;
+            const releaseStart = when + dur - release;
+            if (decayEnd > releaseStart) decayEnd = releaseStart;
+            if (decayEnd < when + attack) decayEnd = when + attack;
+
+            gainNode.gain.linearRampToValueAtTime(sustain, decayEnd);
+            if (releaseStart > decayEnd) {
+                gainNode.gain.setValueAtTime(sustain, releaseStart);
+            }
+            gainNode.gain.linearRampToValueAtTime(0, when + dur);
+        }
+
+        // Синтезированный "кик" (samples[max] × 0.35 × 10^(-12/20), 60 мс, 200 Гц)
+        function scheduleKick(when) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = 200;
+            const dur = 0.06;
+
+            const peak = 0.35 * Math.pow(10, -12 / 20);
+            gain.gain.setValueAtTime(peak, when);
+            gain.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(when);
+            osc.stop(when + dur);
+            return osc;
+        }
 
         function scheduleBass(fromTime) {
             if (!isSynthMode || !audioCtx) return;
             scheduledNodes.forEach(n => { try { n.stop(); } catch(e){} });
             scheduledNodes = [];
+            scheduledKicks.forEach(n => { try { n.stop(); } catch(e){} });
+            scheduledKicks = [];
 
-            let audioStartTime = audioCtx.currentTime;
+            const audioStartTime = audioCtx.currentTime + 0.02;
 
             notes.forEach(note => {
                 if (note.start + note.dur < fromTime) return;
 
-                let actualStart = Math.max(note.start, fromTime);
-                let offset = actualStart - note.start;
-                let dur = note.dur - offset;
+                const actualStart = Math.max(note.start, fromTime);
+                const offset = actualStart - note.start;
+                const dur = note.dur - offset;
                 if (dur < 0.05) return;
 
-                let when = audioStartTime + (actualStart - fromTime);
+                const when = audioStartTime + (actualStart - fromTime);
 
-                let osc = audioCtx.createOscillator();
-                let gain = audioCtx.createGain();
-
+                const osc = audioCtx.createOscillator();
+                const env = audioCtx.createGain();
                 osc.type = 'sine';
                 osc.frequency.value = note.freq;
-
-                let attack = 0.01;
-                let release = 0.09;
-                let sustain = 0.55;
-
-                gain.gain.setValueAtTime(0, when);
-                gain.gain.linearRampToValueAtTime(1, when + attack);
-
-                let decayEnd = when + attack + 0.3 * dur;
-                if (decayEnd > when + dur - release) decayEnd = when + dur - release;
-                if (decayEnd < when + attack) decayEnd = when + attack;
-
-                gain.gain.linearRampToValueAtTime(sustain, decayEnd);
-                gain.gain.setValueAtTime(sustain, when + dur - release);
-                gain.gain.linearRampToValueAtTime(0, when + dur);
-
-                osc.connect(gain);
-                gain.connect(bassGainNode);
-
+                applyEnvelope(env, when, dur);
+                osc.connect(env);
+                env.connect(bassBus);
                 osc.start(when);
                 osc.stop(when + dur);
                 scheduledNodes.push(osc);
+
+                if (actualStart === note.start) {
+                    const k = scheduleKick(when);
+                    scheduledKicks.push(k);
+                }
             });
         }
 
         function stopBass() {
             scheduledNodes.forEach(n => { try { n.stop(); } catch(e){} });
             scheduledNodes = [];
+            scheduledKicks.forEach(n => { try { n.stop(); } catch(e){} });
+            scheduledKicks = [];
         }
 
         function playNoteSound(freq) {
@@ -164,8 +238,8 @@
             if (audioCtx.state === 'suspended') audioCtx.resume();
             let playableFreq = freq * 4;
             if (playableFreq < 60) playableFreq = 60;
-            let osc = audioCtx.createOscillator();
-            let gain = audioCtx.createGain();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
             osc.type = 'sine';
             osc.frequency.value = playableFreq;
             gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
@@ -210,11 +284,23 @@
 
         let isDragging = false, startX = 0;
 
+        // Геометрия нот как в NoteEditor: высота = частота
+        const NOTE_AREA_TOP = 150 + 30;
+        const NOTE_AREA_BOTTOM = 20;
+        const NOTE_H = 14;
+
+        function freqToY(freq) {
+            const noteAreaH = canvas.height - NOTE_AREA_TOP - NOTE_AREA_BOTTOM;
+            const norm = Math.max(0, Math.min(1, (freq - 20) / 180));
+            return NOTE_AREA_TOP + (1 - norm) * (noteAreaH - NOTE_H);
+        }
+
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+
             ctx.strokeStyle = '#333';
             for (let i = 0; i <= duration; i++) {
-                let x = i * PPS;
+                const x = i * PPS;
                 ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
                 if (i % 5 === 0) {
                     ctx.fillStyle = '#666'; ctx.font = '12px Arial';
@@ -222,16 +308,61 @@
                 }
             }
 
-            notes.forEach(note => {
-                let x = note.start * PPS;
-                let y = canvas.height - 100;
-                let w = note.dur * PPS;
-                let isSel = selectedNotes.includes(note);
-                ctx.fillStyle = isSel ? '#ffaa00' : (note.freq > 30 ? '#ff9900' : '#7ad07a');
-                ctx.fillRect(x, y, Math.max(w, 10), 20);
-                ctx.fillStyle = 'black'; ctx.font = '12px Arial';
-                ctx.fillText(note.freq + 'Hz', x + 2, y + 15);
+            notes.forEach((note, idx) => {
+                const x = note.start * PPS;
+                const w = Math.max(note.dur * PPS, 10);
+                const y = freqToY(note.freq);
+
+                const isSel = selectedNotes.includes(note);
+                const isAccent = accentHz > 0 && Math.abs(note.freq - accentHz) < 0.5;
+                const isMain = mainHz > 0 && Math.abs(note.freq - mainHz) < 0.5;
+
+                let fill, outline;
+                if (isSel) {
+                    fill = '#3a8eef'; outline = '#fff';
+                } else if (isAccent) {
+                    fill = '#ffaa00'; outline = '#803300';
+                } else if (isMain) {
+                    fill = '#7ad07a'; outline = '#2a5a2a';
+                } else {
+                    fill = '#5a9a8a'; outline = '#2a3a3a';
+                }
+
+                ctx.fillStyle = fill;
+                ctx.fillRect(x, y, w, NOTE_H);
+                ctx.strokeStyle = outline;
+                ctx.lineWidth = 1;
+                ctx.strokeRect(x + 0.5, y + 0.5, w - 1, NOTE_H - 1);
+
+                if (w > 32) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+                    ctx.font = 'bold 10px Arial';
+                    ctx.fillText(note.freq + 'Hz', x + 3, y + 11);
+                }
+
+                ctx.fillStyle = '#aaa';
+                ctx.font = '9px Arial';
+                ctx.fillText((idx + 1).toString(), x + 2, y - 2);
+
+                if (w <= 32) {
+                    ctx.fillStyle = isAccent ? '#ffaa00' : (isMain ? '#7ad07a' : '#aaa');
+                    ctx.font = '9px Arial';
+                    ctx.fillText(note.freq + '', x + 2 + 15, y - 2);
+                }
             });
+        }
+
+        function hitTestNote(x, y) {
+            for (let i = notes.length - 1; i >= 0; i--) {
+                const note = notes[i];
+                const nx = note.start * PPS;
+                const nw = Math.max(note.dur * PPS, 10);
+                const ny = freqToY(note.freq);
+                if (x >= nx - 4 && x <= nx + nw + 4 && y >= ny - 6 && y <= ny + NOTE_H + 6) {
+                    return note;
+                }
+            }
+            return null;
         }
 
         canvas.addEventListener('touchstart', (e) => {
@@ -239,24 +370,14 @@
             const x = e.touches[0].clientX - rect.left + container.scrollLeft;
             const y = e.touches[0].clientY - rect.top;
 
-            let clickedNote = null;
-            for (let note of notes) {
-                let nx = note.start * PPS;
-                let ny = canvas.height - 100;
-                let nw = Math.max(note.dur * PPS, 15);
-
-                if (x >= nx - 10 && x <= nx + nw + 10 && y >= ny - 20 && y <= ny + 40) {
-                    clickedNote = note;
-                    isDragging = true;
-                    startX = x;
-                    break;
-                }
-            }
+            const clickedNote = hitTestNote(x, y);
 
             if (clickedNote) {
                 if (!selectedNotes.includes(clickedNote)) {
                     selectedNotes = [clickedNote];
                 }
+                isDragging = true;
+                startX = x;
                 dragStartPositions = {};
                 selectedNotes.forEach(n => dragStartPositions[n] = n.start);
                 playNoteSound(clickedNote.freq);
@@ -270,7 +391,7 @@
             if (!isDragging || selectedNotes.length === 0) return;
             const rect = canvas.getBoundingClientRect();
             const x = e.touches[0].clientX - rect.left + container.scrollLeft;
-            let delta = (x - startX) / PPS;
+            const delta = (x - startX) / PPS;
 
             selectedNotes.forEach(n => {
                 n.start = Math.max(0, dragStartPositions[n] + delta);
@@ -304,45 +425,43 @@
         }
 
         wavesurfer.on('audioprocess', () => {
-            let time = wavesurfer.getCurrentTime();
+            const time = wavesurfer.getCurrentTime();
             document.getElementById('timer').innerText = formatTime(time) + ' / ' + formatTime(duration);
 
-            let currentX = time * PPS;
+            const currentX = time * PPS;
             playhead.style.left = currentX + 'px';
             playhead.style.display = 'block';
 
-            let w = container.clientWidth;
+            const w = container.clientWidth;
             if (currentX > w / 2) {
                 container.scrollLeft = currentX - (w / 2);
             }
         });
 
         wavesurfer.on('seek', () => {
-            let time = wavesurfer.getCurrentTime();
-            let currentX = time * PPS;
-            playhead.style.left = currentX + 'px';
-            if (wavesurfer.isPlaying()) {
-                scheduleBass(time);
-            }
+            const time = wavesurfer.getCurrentTime();
+            playhead.style.left = (time * PPS) + 'px';
+            if (wavesurfer.isPlaying()) scheduleBass(time);
         });
 
         wavesurfer.on('pause', () => { playhead.style.display = 'none'; stopBass(); });
         wavesurfer.on('finish', () => { playhead.style.display = 'none'; stopBass(); });
 
         function formatTime(sec) {
-            let m = Math.floor(sec / 60); let s = Math.floor(sec % 60);
+            const m = Math.floor(sec / 60);
+            const s = Math.floor(sec % 60);
             return m + ":" + (s < 10 ? "0" : "") + s;
         }
 
         function splitNote() {
             if (selectedNotes.length !== 1) return alert("Выберите одну ноту");
-            let note = selectedNotes[0];
-            let idx = notes.indexOf(note);
+            const note = selectedNotes[0];
+            const idx = notes.indexOf(note);
             if (idx === -1) return;
-            let halfDur = note.dur / 2;
+            const halfDur = note.dur / 2;
             if (halfDur < 0.05) return alert("Нота слишком короткая");
 
-            let newNote = {start: note.start + halfDur, freq: note.freq, dur: halfDur};
+            const newNote = {start: note.start + halfDur, freq: note.freq, dur: halfDur};
             note.dur = halfDur;
             notes.splice(idx + 1, 0, newNote);
             selectedNotes = [];
@@ -353,15 +472,15 @@
 
         function joinNotes() {
             if (selectedNotes.length < 2) return alert("Выберите 2 или более нот");
-            let sorted = [...selectedNotes].sort((a,b) => a.start - b.start);
-            let start = sorted[0].start;
-            let end = sorted[sorted.length-1].start + sorted[sorted.length-1].dur;
-            let freq = sorted[0].freq;
+            const sorted = [...selectedNotes].sort((a, b) => a.start - b.start);
+            const start = sorted[0].start;
+            const end = sorted[sorted.length - 1].start + sorted[sorted.length - 1].dur;
+            const freq = sorted[0].freq;
 
-            let newNote = {start: start, freq: freq, dur: end - start};
+            const newNote = {start: start, freq: freq, dur: end - start};
             notes = notes.filter(n => !selectedNotes.includes(n));
             notes.push(newNote);
-            notes.sort((a,b) => a.start - b.start);
+            notes.sort((a, b) => a.start - b.start);
             selectedNotes = [];
             draw();
             playNoteSound(newNote.freq);
@@ -379,24 +498,24 @@
         }
 
         document.getElementById('vol-inst').addEventListener('input', (e) => {
-            let val = e.target.value;
+            const val = e.target.value;
             document.getElementById('val-inst').innerText = val + '%';
             wavesurfer.setVolume(val / 100);
         });
 
         document.getElementById('vol-bass').addEventListener('input', (e) => {
-            let val = parseFloat(e.target.value);
+            const val = parseFloat(e.target.value);
             document.getElementById('val-bass').innerText = val + ' dB';
-            initAudio(); // [FIX] защита от null bassGainNode
+            initAudio();
             if (bassGainNode) {
-                let finalDb = 7.0 + val;
+                const finalDb = 7.0 + val;
                 bassGainNode.gain.value = Math.pow(10, finalDb / 20);
             }
         });
 
         async function save() {
-            let sliderBass = parseFloat(document.getElementById('vol-bass').value);
-            let finalBassDb = 7.0 + sliderBass;
+            const sliderBass = parseFloat(document.getElementById('vol-bass').value);
+            const finalBassDb = 7.0 + sliderBass;
 
             try {
                 await fetch(`${SUPABASE_URL}/rest/v1/temp_notes?id=eq.${jobId}`, {
@@ -413,7 +532,7 @@
 
             const data = {
                 job_id: jobId,
-                job_dir: jobDir, // [FIX] возвращаем в бота
+                job_dir: jobDir,
                 vol_inst: document.getElementById('vol-inst').value,
                 vol_bass: finalBassDb
             };
