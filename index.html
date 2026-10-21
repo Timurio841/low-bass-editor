@@ -10,21 +10,14 @@
         body { margin: 0; background: #141414; color: white; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         .header { display: flex; justify-content: space-between; padding: 10px; background: #1a1a1a; align-items: center; }
         .time { color: #4a9eff; font-weight: bold; font-size: 14px; }
-
         .editor-container { flex-grow: 1; position: relative; overflow-x: auto; overflow-y: hidden; background: #0d0d0d; }
         #waveform { position: absolute; top: 50px; left: 0; height: 150px; }
         #notes-canvas { position: absolute; top: 0; left: 0; height: 100%; z-index: 10; }
-
-        #playhead {
-            position: absolute; top: 0; bottom: 0; width: 2px; background: #ff4444;
-            z-index: 15; display: none; pointer-events: none; box-shadow: 0 0 5px #ff4444;
-        }
-
+        #playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #ff4444; z-index: 15; display: none; pointer-events: none; box-shadow: 0 0 5px #ff4444; }
         .controls { background: #1a1a1a; padding: 10px; display: flex; flex-direction: column; gap: 5px; z-index: 20; }
         .slider-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #aaa; }
         .slider-row input { width: 50%; accent-color: #3a8eef; }
         .val { width: 50px; text-align: right; color: #fff; font-weight: bold; }
-
         .actions { display: flex; gap: 5px; padding: 10px; background: #141414; z-index: 20; flex-wrap: wrap; }
         .btn { flex: 1; min-width: 70px; padding: 12px 5px; border: none; border-radius: 8px; font-weight: bold; font-size: 14px; color: white; }
         .btn-green { background: #7ad07a; color: black; }
@@ -88,16 +81,17 @@
         let dragStartPositions = {};
         let isSynthMode = false;
 
-        // === WEB AUDIO API (БАС) ===
+        // [FIX] Цепочка: osc → env → bassBus → HPF(20) → Comp(-12/3) → master(+7дБ)
+        //           → soft limiter tanh(2x) → destination
         let audioCtx = null;
         let bassBus = null;
-        let bassGainNode = null;
+        let masterGain = null;
         let scheduledNodes = [];
         let scheduledKicks = [];
 
-        // Soft-clip для лимитера (заменяет жёсткий клиппинг Web Audio)
+        // [FIX] soft limiter curve - гарантирует выход ±1
         function makeSoftClipCurve(amount) {
-            const n = 2048;
+            const n = 4096;
             const curve = new Float32Array(n);
             for (let i = 0; i < n; i++) {
                 const x = (i * 2 / (n - 1)) - 1;
@@ -106,8 +100,6 @@
             return curve;
         }
 
-        // Цепочка как в processor.py:
-        //   osc → envGain → bassBus → HPF(20) → Compressor(-12, 3) → masterGain(+7дБ) → softLimiter → dest
         function initAudio() {
             if (!instUrl) return;
             isSynthMode = true;
@@ -117,11 +109,13 @@
                 bassBus = audioCtx.createGain();
                 bassBus.gain.value = 1.0;
 
+                // HPF 20 Гц — как HighpassFilter(20) в Python
                 const hp = audioCtx.createBiquadFilter();
                 hp.type = 'highpass';
                 hp.frequency.value = 20;
                 hp.Q.value = 0.7;
 
+                // Компрессор — как Compressor(-12, 3) в Python
                 const comp = audioCtx.createDynamicsCompressor();
                 comp.threshold.value = -12;
                 comp.knee.value = 6;
@@ -129,17 +123,20 @@
                 comp.attack.value = 0.003;
                 comp.release.value = 0.25;
 
-                bassGainNode = audioCtx.createGain();
-                bassGainNode.gain.value = Math.pow(10, 7.0 / 20);
+                // Master gain — базовая +7дБ
+                masterGain = audioCtx.createGain();
+                masterGain.gain.value = Math.pow(10, 7.0 / 20);  // ≈ 2.24
 
+                // [FIX] soft limiter tanh(2x) — заменяет жёсткий клиппинг
                 const limiter = audioCtx.createWaveShaper();
-                limiter.curve = makeSoftClipCurve(1.2);
+                limiter.curve = makeSoftClipCurve(2.0);
                 limiter.oversample = '4x';
 
+                // Цепочка
                 bassBus.connect(hp);
                 hp.connect(comp);
-                comp.connect(bassGainNode);
-                bassGainNode.connect(limiter);
+                comp.connect(masterGain);
+                masterGain.connect(limiter);
                 limiter.connect(audioCtx.destination);
             }
             if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -147,40 +144,31 @@
 
         initAudio();
 
-        // Огибающая идентична make_envelope в processor.py:
-        // attack=3мс, decay до 0.55 за 0.3*dur, sustain=0.55, release=80мс
+        // Огибающая — как make_envelope в processor.py
         function applyEnvelope(gainNode, when, dur) {
             const attack = 0.003;
             const release = 0.08;
             const sustain = 0.55;
-
             gainNode.gain.setValueAtTime(0, when);
             gainNode.gain.linearRampToValueAtTime(1, when + attack);
-
             let decayEnd = when + attack + 0.3 * dur;
             const releaseStart = when + dur - release;
             if (decayEnd > releaseStart) decayEnd = releaseStart;
             if (decayEnd < when + attack) decayEnd = when + attack;
-
             gainNode.gain.linearRampToValueAtTime(sustain, decayEnd);
-            if (releaseStart > decayEnd) {
-                gainNode.gain.setValueAtTime(sustain, releaseStart);
-            }
+            if (releaseStart > decayEnd) gainNode.gain.setValueAtTime(sustain, releaseStart);
             gainNode.gain.linearRampToValueAtTime(0, when + dur);
         }
 
-        // Синтезированный "кик" (samples[max] × 0.35 × 10^(-12/20), 60 мс, 200 Гц)
         function scheduleKick(when) {
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.type = 'sine';
             osc.frequency.value = 200;
             const dur = 0.06;
-
             const peak = 0.35 * Math.pow(10, -12 / 20);
             gain.gain.setValueAtTime(peak, when);
             gain.gain.exponentialRampToValueAtTime(0.0001, when + dur);
-
             osc.connect(gain);
             gain.connect(audioCtx.destination);
             osc.start(when);
@@ -199,12 +187,10 @@
 
             notes.forEach(note => {
                 if (note.start + note.dur < fromTime) return;
-
                 const actualStart = Math.max(note.start, fromTime);
                 const offset = actualStart - note.start;
                 const dur = note.dur - offset;
                 if (dur < 0.05) return;
-
                 const when = audioStartTime + (actualStart - fromTime);
 
                 const osc = audioCtx.createOscillator();
@@ -242,7 +228,7 @@
             const gain = audioCtx.createGain();
             osc.type = 'sine';
             osc.frequency.value = playableFreq;
-            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
             osc.connect(gain);
             gain.connect(audioCtx.destination);
@@ -284,7 +270,6 @@
 
         let isDragging = false, startX = 0;
 
-        // Геометрия нот как в NoteEditor: высота = частота
         const NOTE_AREA_TOP = 150 + 30;
         const NOTE_AREA_BOTTOM = 20;
         const NOTE_H = 14;
@@ -297,7 +282,6 @@
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-
             ctx.strokeStyle = '#333';
             for (let i = 0; i <= duration; i++) {
                 const x = i * PPS;
@@ -307,43 +291,31 @@
                     ctx.fillText(i + 's', x + 5, 20);
                 }
             }
-
             notes.forEach((note, idx) => {
                 const x = note.start * PPS;
                 const w = Math.max(note.dur * PPS, 10);
                 const y = freqToY(note.freq);
-
                 const isSel = selectedNotes.includes(note);
                 const isAccent = accentHz > 0 && Math.abs(note.freq - accentHz) < 0.5;
                 const isMain = mainHz > 0 && Math.abs(note.freq - mainHz) < 0.5;
-
                 let fill, outline;
-                if (isSel) {
-                    fill = '#3a8eef'; outline = '#fff';
-                } else if (isAccent) {
-                    fill = '#ffaa00'; outline = '#803300';
-                } else if (isMain) {
-                    fill = '#7ad07a'; outline = '#2a5a2a';
-                } else {
-                    fill = '#5a9a8a'; outline = '#2a3a3a';
-                }
-
+                if (isSel) { fill = '#3a8eef'; outline = '#fff'; }
+                else if (isAccent) { fill = '#ffaa00'; outline = '#803300'; }
+                else if (isMain) { fill = '#7ad07a'; outline = '#2a5a2a'; }
+                else { fill = '#5a9a8a'; outline = '#2a3a3a'; }
                 ctx.fillStyle = fill;
                 ctx.fillRect(x, y, w, NOTE_H);
                 ctx.strokeStyle = outline;
                 ctx.lineWidth = 1;
                 ctx.strokeRect(x + 0.5, y + 0.5, w - 1, NOTE_H - 1);
-
                 if (w > 32) {
                     ctx.fillStyle = 'rgba(0,0,0,0.85)';
                     ctx.font = 'bold 10px Arial';
                     ctx.fillText(note.freq + 'Hz', x + 3, y + 11);
                 }
-
                 ctx.fillStyle = '#aaa';
                 ctx.font = '9px Arial';
                 ctx.fillText((idx + 1).toString(), x + 2, y - 2);
-
                 if (w <= 32) {
                     ctx.fillStyle = isAccent ? '#ffaa00' : (isMain ? '#7ad07a' : '#aaa');
                     ctx.font = '9px Arial';
@@ -358,9 +330,7 @@
                 const nx = note.start * PPS;
                 const nw = Math.max(note.dur * PPS, 10);
                 const ny = freqToY(note.freq);
-                if (x >= nx - 4 && x <= nx + nw + 4 && y >= ny - 6 && y <= ny + NOTE_H + 6) {
-                    return note;
-                }
+                if (x >= nx - 4 && x <= nx + nw + 4 && y >= ny - 6 && y <= ny + NOTE_H + 6) return note;
             }
             return null;
         }
@@ -369,13 +339,9 @@
             const rect = canvas.getBoundingClientRect();
             const x = e.touches[0].clientX - rect.left + container.scrollLeft;
             const y = e.touches[0].clientY - rect.top;
-
             const clickedNote = hitTestNote(x, y);
-
             if (clickedNote) {
-                if (!selectedNotes.includes(clickedNote)) {
-                    selectedNotes = [clickedNote];
-                }
+                if (!selectedNotes.includes(clickedNote)) selectedNotes = [clickedNote];
                 isDragging = true;
                 startX = x;
                 dragStartPositions = {};
@@ -392,10 +358,7 @@
             const rect = canvas.getBoundingClientRect();
             const x = e.touches[0].clientX - rect.left + container.scrollLeft;
             const delta = (x - startX) / PPS;
-
-            selectedNotes.forEach(n => {
-                n.start = Math.max(0, dragStartPositions[n] + delta);
-            });
+            selectedNotes.forEach(n => { n.start = Math.max(0, dragStartPositions[n] + delta); });
             draw();
             rescheduleIfPlaying();
         });
@@ -406,7 +369,6 @@
             initAudio();
             if (!audioCtx) { alert("Аудио контекст не инициализирован"); return; }
             if (audioCtx.state === 'suspended') audioCtx.resume();
-
             if (wavesurfer.isPlaying()) {
                 wavesurfer.pause();
                 stopBass();
@@ -427,15 +389,11 @@
         wavesurfer.on('audioprocess', () => {
             const time = wavesurfer.getCurrentTime();
             document.getElementById('timer').innerText = formatTime(time) + ' / ' + formatTime(duration);
-
             const currentX = time * PPS;
             playhead.style.left = currentX + 'px';
             playhead.style.display = 'block';
-
             const w = container.clientWidth;
-            if (currentX > w / 2) {
-                container.scrollLeft = currentX - (w / 2);
-            }
+            if (currentX > w / 2) container.scrollLeft = currentX - (w / 2);
         });
 
         wavesurfer.on('seek', () => {
@@ -460,7 +418,6 @@
             if (idx === -1) return;
             const halfDur = note.dur / 2;
             if (halfDur < 0.05) return alert("Нота слишком короткая");
-
             const newNote = {start: note.start + halfDur, freq: note.freq, dur: halfDur};
             note.dur = halfDur;
             notes.splice(idx + 1, 0, newNote);
@@ -476,7 +433,6 @@
             const start = sorted[0].start;
             const end = sorted[sorted.length - 1].start + sorted[sorted.length - 1].dur;
             const freq = sorted[0].freq;
-
             const newNote = {start: start, freq: freq, dur: end - start};
             notes = notes.filter(n => !selectedNotes.includes(n));
             notes.push(newNote);
@@ -507,16 +463,15 @@
             const val = parseFloat(e.target.value);
             document.getElementById('val-bass').innerText = val + ' dB';
             initAudio();
-            if (bassGainNode) {
+            if (masterGain) {
                 const finalDb = 7.0 + val;
-                bassGainNode.gain.value = Math.pow(10, finalDb / 20);
+                masterGain.gain.value = Math.pow(10, finalDb / 20);
             }
         });
 
         async function save() {
             const sliderBass = parseFloat(document.getElementById('vol-bass').value);
             const finalBassDb = 7.0 + sliderBass;
-
             try {
                 await fetch(`${SUPABASE_URL}/rest/v1/temp_notes?id=eq.${jobId}`, {
                     method: 'PATCH',
@@ -529,7 +484,6 @@
                     body: JSON.stringify({ notes: notes })
                 });
             } catch(e) { console.error(e); }
-
             const data = {
                 job_id: jobId,
                 job_dir: jobDir,
