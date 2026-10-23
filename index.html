@@ -24,6 +24,7 @@
         .btn-gray { background: #333; }
         .btn-blue { background: #3a8eef; }
         .btn-orange { background: #ffaa00; color: black; }
+        .btn-purple { background: #9b59b6; color: white; }
     </style>
 </head>
 <body>
@@ -51,6 +52,7 @@
     <div class="actions">
         <button class="btn btn-gray" onclick="tg.close()">Отмена</button>
         <button class="btn btn-blue" onclick="togglePlay()" id="play-btn">▶ Play</button>
+        <button class="btn btn-purple" onclick="applyChanges(event)">✓ Применить</button>
         <button class="btn btn-green" onclick="save()">✓ Готово</button>
     </div>
     <div class="actions">
@@ -119,10 +121,12 @@
                 comp.release.value = 0.25;
 
                 masterGain = audioCtx.createGain();
-                masterGain.gain.value = Math.pow(10, 7.0 / 20);
+                // [FIX] +6дБ вместо +9 — компенсация sustain 0.55 и наложения, чтобы не «пердело»
+                masterGain.gain.value = Math.pow(10, 6.0 / 20);
 
                 const limiter = audioCtx.createWaveShaper();
-                limiter.curve = makeSoftClipCurve(2.0);
+                // [FIX] tanh(3x) — мягче обрезает, меньше «пердёжа» на низах
+                limiter.curve = makeSoftClipCurve(3.0);
                 limiter.oversample = '4x';
 
                 bassBus.connect(hp);
@@ -455,14 +459,53 @@
             document.getElementById('val-bass').innerText = val + ' dB';
             initAudio();
             if (masterGain) {
-                const finalDb = 7.0 + val;
+                // [FIX] база +6дБ вместо +9 — см. комментарий в initAudio
+                const finalDb = 6.0 + val;
                 masterGain.gain.value = Math.pow(10, finalDb / 20);
             }
         });
 
+        // [NEW] Применить изменения без сохранения — пересобрать превью
+        async function applyChanges(ev) {
+            try {
+                await fetch(`${SUPABASE_URL}/rest/v1/temp_notes?id=eq.${jobId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'apikey': SUPABASE_KEY,
+                        'Authorization': `Bearer ${SUPABASE_KEY}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=minimal'
+                    },
+                    body: JSON.stringify({ notes: notes })
+                });
+            } catch(e) { console.error(e); }
+
+            stopBass();
+            if (wavesurfer.isPlaying()) {
+                scheduleBass(wavesurfer.getCurrentTime());
+            } else {
+                wavesurfer.seekTo(0);
+                wavesurfer.play();
+                scheduleBass(0);
+                document.getElementById('play-btn').innerText = "⏸ Pause";
+            }
+
+            if (ev && ev.target) {
+                const btn = ev.target;
+                const origText = btn.innerText;
+                btn.innerText = "✓ Применено";
+                btn.disabled = true;
+                setTimeout(() => {
+                    btn.innerText = origText;
+                    btn.disabled = false;
+                }, 800);
+            }
+        }
+
         async function save() {
             const sliderBass = parseFloat(document.getElementById('vol-bass').value);
-            const finalBassDb = 7.0 + sliderBass;
+            // для Python-рендера базовая громкость bass — 9.0 (как в main.py)
+            let finalBassDb = 9.0 + sliderBass;
             try {
                 await fetch(`${SUPABASE_URL}/rest/v1/temp_notes?id=eq.${jobId}`, {
                     method: 'PATCH',
