@@ -104,7 +104,6 @@
             isSynthMode = true;
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
                 bassBus = audioCtx.createGain();
                 bassBus.gain.value = 1.0;
 
@@ -121,12 +120,12 @@
                 comp.release.value = 0.25;
 
                 masterGain = audioCtx.createGain();
-                // [FIX] +6дБ вместо +9 — компенсация sustain 0.55 и наложения, чтобы не «пердело»
-                masterGain.gain.value = Math.pow(10, 6.0 / 20);
+                // [FIX] +3дБ — без клиппинга на плотных треках
+                masterGain.gain.value = Math.pow(10, 3.0 / 20);
 
                 const limiter = audioCtx.createWaveShaper();
-                // [FIX] tanh(3x) — мягче обрезает, меньше «пердёжа» на низах
-                limiter.curve = makeSoftClipCurve(3.0);
+                // [FIX] tanh(1.5x) — мягче, почти не искажает
+                limiter.curve = makeSoftClipCurve(1.5);
                 limiter.oversample = '4x';
 
                 bassBus.connect(hp);
@@ -143,7 +142,8 @@
         function applyEnvelope(gainNode, when, dur) {
             const attack = 0.003;
             const release = 0.08;
-            const sustain = 0.55;
+            // [FIX] sustain 0.45 — меньше клиппинга
+            const sustain = 0.45;
             gainNode.gain.setValueAtTime(0, when);
             gainNode.gain.linearRampToValueAtTime(1, when + attack);
             let decayEnd = when + attack + 0.3 * dur;
@@ -159,9 +159,10 @@
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.type = 'sine';
-            osc.frequency.value = 200;
+            // [FIX] 70 Гц — низкая «бочка», а не писк 200 Гц
+            osc.frequency.value = 70;
             const dur = 0.06;
-            const peak = 0.35 * Math.pow(10, -12 / 20);
+            const peak = 0.35 * Math.pow(10, -8 / 20);
             gain.gain.setValueAtTime(peak, when);
             gain.gain.exponentialRampToValueAtTime(0.0001, when + dur);
             osc.connect(gain);
@@ -217,12 +218,12 @@
             initAudio();
             if (!isSynthMode || !audioCtx) return;
             if (audioCtx.state === 'suspended') audioCtx.resume();
-            let playableFreq = freq * 4;
-            if (playableFreq < 60) playableFreq = 60;
+            let pf = freq * 4;
+            if (pf < 60) pf = 60;
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.type = 'sine';
-            osc.frequency.value = playableFreq;
+            osc.frequency.value = pf;
             gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
             osc.connect(gain);
@@ -265,7 +266,7 @@
 
         let isDragging = false, startX = 0;
 
-        const NOTE_AREA_TOP = 150 + 30;
+        const NOTE_AREA_TOP = 180;
         const NOTE_AREA_BOTTOM = 20;
         const NOTE_H = 14;
 
@@ -311,11 +312,6 @@
                 ctx.fillStyle = '#aaa';
                 ctx.font = '9px Arial';
                 ctx.fillText((idx + 1).toString(), x + 2, y - 2);
-                if (w <= 32) {
-                    ctx.fillStyle = isAccent ? '#ffaa00' : (isMain ? '#7ad07a' : '#aaa');
-                    ctx.font = '9px Arial';
-                    ctx.fillText(note.freq + '', x + 2 + 15, y - 2);
-                }
             });
         }
 
@@ -412,7 +408,7 @@
             const idx = notes.indexOf(note);
             if (idx === -1) return;
             const halfDur = note.dur / 2;
-            if (halfDur < 0.05) return alert("Нота слишком короткая");
+            if (halfDur < 0.05) return alert("Слишком короткая");
             const newNote = {start: note.start + halfDur, freq: note.freq, dur: halfDur};
             note.dur = halfDur;
             notes.splice(idx + 1, 0, newNote);
@@ -423,7 +419,7 @@
         }
 
         function joinNotes() {
-            if (selectedNotes.length < 2) return alert("Выберите 2 или более нот");
+            if (selectedNotes.length < 2) return alert("Выберите 2+");
             const sorted = [...selectedNotes].sort((a, b) => a.start - b.start);
             const start = sorted[0].start;
             const end = sorted[sorted.length - 1].start + sorted[sorted.length - 1].dur;
@@ -459,13 +455,12 @@
             document.getElementById('val-bass').innerText = val + ' dB';
             initAudio();
             if (masterGain) {
-                // [FIX] база +6дБ вместо +9 — см. комментарий в initAudio
-                const finalDb = 6.0 + val;
+                // [FIX] база +3дБ (совпадает с initAudio)
+                const finalDb = 3.0 + val;
                 masterGain.gain.value = Math.pow(10, finalDb / 20);
             }
         });
 
-        // [NEW] Применить изменения без сохранения — пересобрать превью
         async function applyChanges(ev) {
             try {
                 await fetch(`${SUPABASE_URL}/rest/v1/temp_notes?id=eq.${jobId}`, {
@@ -504,8 +499,8 @@
 
         async function save() {
             const sliderBass = parseFloat(document.getElementById('vol-bass').value);
-            // для Python-рендера базовая громкость bass — 9.0 (как в main.py)
-            let finalBassDb = 9.0 + sliderBass;
+            // базовая громкость bass для Python-рендера — 6.0 dB
+            let finalBassDb = 6.0 + sliderBass;
             try {
                 await fetch(`${SUPABASE_URL}/rest/v1/temp_notes?id=eq.${jobId}`, {
                     method: 'PATCH',
