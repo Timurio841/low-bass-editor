@@ -87,7 +87,6 @@
         let bassBus = null;
         let masterGain = null;
         let scheduledNodes = [];
-        let scheduledKicks = [];
 
         function makeSoftClipCurve(amount) {
             const n = 4096;
@@ -112,25 +111,17 @@
                 hp.frequency.value = 20;
                 hp.Q.value = 0.7;
 
-                const comp = audioCtx.createDynamicsCompressor();
-                comp.threshold.value = -12;
-                comp.knee.value = 6;
-                comp.ratio.value = 3;
-                comp.attack.value = 0.003;
-                comp.release.value = 0.25;
-
                 masterGain = audioCtx.createGain();
-                // [FIX] +3дБ — без клиппинга на плотных треках
-                masterGain.gain.value = Math.pow(10, 3.0 / 20);
+                // +6 dB — как в Python-рендере
+                masterGain.gain.value = Math.pow(10, 6.0 / 20);
 
                 const limiter = audioCtx.createWaveShaper();
-                // [FIX] tanh(1.5x) — мягче, почти не искажает
-                limiter.curve = makeSoftClipCurve(1.5);
+                // tanh(2x) — мягкий лимитер
+                limiter.curve = makeSoftClipCurve(2.0);
                 limiter.oversample = '4x';
 
                 bassBus.connect(hp);
-                hp.connect(comp);
-                comp.connect(masterGain);
+                hp.connect(masterGain);
                 masterGain.connect(limiter);
                 limiter.connect(audioCtx.destination);
             }
@@ -139,45 +130,22 @@
 
         initAudio();
 
+        // [FIX] Огибающая: attack 5мс, тело 1.0, release 30мс
         function applyEnvelope(gainNode, when, dur) {
-            const attack = 0.003;
-            const release = 0.08;
-            // [FIX] sustain 0.45 — меньше клиппинга
-            const sustain = 0.45;
+            const attack = 0.005;
+            const release = 0.03;
             gainNode.gain.setValueAtTime(0, when);
             gainNode.gain.linearRampToValueAtTime(1, when + attack);
-            let decayEnd = when + attack + 0.3 * dur;
-            const releaseStart = when + dur - release;
-            if (decayEnd > releaseStart) decayEnd = releaseStart;
-            if (decayEnd < when + attack) decayEnd = when + attack;
-            gainNode.gain.linearRampToValueAtTime(sustain, decayEnd);
-            if (releaseStart > decayEnd) gainNode.gain.setValueAtTime(sustain, releaseStart);
+            gainNode.gain.setValueAtTime(1, when + dur - release);
             gainNode.gain.linearRampToValueAtTime(0, when + dur);
         }
 
-        function scheduleKick(when) {
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.type = 'sine';
-            // [FIX] 70 Гц — низкая «бочка», а не писк 200 Гц
-            osc.frequency.value = 70;
-            const dur = 0.06;
-            const peak = 0.35 * Math.pow(10, -8 / 20);
-            gain.gain.setValueAtTime(peak, when);
-            gain.gain.exponentialRampToValueAtTime(0.0001, when + dur);
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.start(when);
-            osc.stop(when + dur);
-            return osc;
-        }
+        // [FIX] Kick в редакторе убран — он уже в inst.mp3
 
         function scheduleBass(fromTime) {
             if (!isSynthMode || !audioCtx) return;
             scheduledNodes.forEach(n => { try { n.stop(); } catch(e){} });
             scheduledNodes = [];
-            scheduledKicks.forEach(n => { try { n.stop(); } catch(e){} });
-            scheduledKicks = [];
 
             const audioStartTime = audioCtx.currentTime + 0.02;
 
@@ -199,19 +167,12 @@
                 osc.start(when);
                 osc.stop(when + dur);
                 scheduledNodes.push(osc);
-
-                if (actualStart === note.start) {
-                    const k = scheduleKick(when);
-                    scheduledKicks.push(k);
-                }
             });
         }
 
         function stopBass() {
             scheduledNodes.forEach(n => { try { n.stop(); } catch(e){} });
             scheduledNodes = [];
-            scheduledKicks.forEach(n => { try { n.stop(); } catch(e){} });
-            scheduledKicks = [];
         }
 
         function playNoteSound(freq) {
@@ -455,8 +416,7 @@
             document.getElementById('val-bass').innerText = val + ' dB';
             initAudio();
             if (masterGain) {
-                // [FIX] база +3дБ (совпадает с initAudio)
-                const finalDb = 3.0 + val;
+                const finalDb = 6.0 + val;
                 masterGain.gain.value = Math.pow(10, finalDb / 20);
             }
         });
@@ -499,7 +459,7 @@
 
         async function save() {
             const sliderBass = parseFloat(document.getElementById('vol-bass').value);
-            // базовая громкость bass для Python-рендера — 6.0 dB
+            // для Python-рендера — база 6.0 dB
             let finalBassDb = 6.0 + sliderBass;
             try {
                 await fetch(`${SUPABASE_URL}/rest/v1/temp_notes?id=eq.${jobId}`, {
