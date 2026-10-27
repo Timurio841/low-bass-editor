@@ -88,12 +88,13 @@
         let masterGain = null;
         let scheduledNodes = [];
 
-        function makeSoftClipCurve(amount) {
+        // [FIX] hard clip вместо tanh — без искажения фазы
+        function makeHardClipCurve(amount) {
             const n = 4096;
             const curve = new Float32Array(n);
             for (let i = 0; i < n; i++) {
                 const x = (i * 2 / (n - 1)) - 1;
-                curve[i] = Math.tanh(x * amount);
+                curve[i] = Math.max(-1, Math.min(1, x * amount));
             }
             return curve;
         }
@@ -112,13 +113,13 @@
                 hp.Q.value = 0.7;
 
                 masterGain = audioCtx.createGain();
-                // +6 dB — как в Python-рендере
+                // +6 dB — как в Python
                 masterGain.gain.value = Math.pow(10, 6.0 / 20);
 
                 const limiter = audioCtx.createWaveShaper();
-                // tanh(2x) — мягкий лимитер
-                limiter.curve = makeSoftClipCurve(2.0);
-                limiter.oversample = '4x';
+                // [FIX] hard clip без искажения фазы
+                limiter.curve = makeHardClipCurve(1.0);
+                limiter.oversample = 'none';
 
                 bassBus.connect(hp);
                 hp.connect(masterGain);
@@ -130,17 +131,16 @@
 
         initAudio();
 
-        // [FIX] Огибающая: attack 5мс, тело 1.0, release 30мс
+        // [FIX] amp 0.5, тело 1.0, только края сглажены
         function applyEnvelope(gainNode, when, dur) {
-            const attack = 0.005;
-            const release = 0.03;
+            const attack = 0.003;
+            const release = 0.003;
+            const amp = 0.5;
             gainNode.gain.setValueAtTime(0, when);
-            gainNode.gain.linearRampToValueAtTime(1, when + attack);
-            gainNode.gain.setValueAtTime(1, when + dur - release);
+            gainNode.gain.linearRampToValueAtTime(amp, when + attack);
+            gainNode.gain.setValueAtTime(amp, when + dur - release);
             gainNode.gain.linearRampToValueAtTime(0, when + dur);
         }
-
-        // [FIX] Kick в редакторе убран — он уже в inst.mp3
 
         function scheduleBass(fromTime) {
             if (!isSynthMode || !audioCtx) return;
@@ -459,7 +459,6 @@
 
         async function save() {
             const sliderBass = parseFloat(document.getElementById('vol-bass').value);
-            // для Python-рендера — база 6.0 dB
             let finalBassDb = 6.0 + sliderBass;
             try {
                 await fetch(`${SUPABASE_URL}/rest/v1/temp_notes?id=eq.${jobId}`, {
