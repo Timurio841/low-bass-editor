@@ -88,7 +88,6 @@
         let masterGain = null;
         let scheduledNodes = [];
 
-        // [FIX] hard clip вместо tanh — без искажения фазы
         function makeHardClipCurve(amount) {
             const n = 4096;
             const curve = new Float32Array(n);
@@ -113,11 +112,9 @@
                 hp.Q.value = 0.7;
 
                 masterGain = audioCtx.createGain();
-                // +6 dB — как в Python
                 masterGain.gain.value = Math.pow(10, 6.0 / 20);
 
                 const limiter = audioCtx.createWaveShaper();
-                // [FIX] hard clip без искажения фазы
                 limiter.curve = makeHardClipCurve(1.0);
                 limiter.oversample = 'none';
 
@@ -131,7 +128,6 @@
 
         initAudio();
 
-        // [FIX] amp 0.5, тело 1.0, только края сглажены
         function applyEnvelope(gainNode, when, dur) {
             const attack = 0.003;
             const release = 0.003;
@@ -450,10 +446,7 @@
                 const origText = btn.innerText;
                 btn.innerText = "✓ Применено";
                 btn.disabled = true;
-                setTimeout(() => {
-                    btn.innerText = origText;
-                    btn.disabled = false;
-                }, 800);
+                setTimeout(() => { btn.innerText = origText; btn.disabled = false; }, 800);
             }
         }
 
