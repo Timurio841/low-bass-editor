@@ -13,7 +13,7 @@ body { margin: 0; background: #141414; color: white; font-family: sans-serif; he
 .time { color: #4a9eff; font-weight: bold; font-size: 13px; }
 .mode-badge { padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; }
 .mode-draft { background: #7ad07a; color: #000; }
-.mode-synth { background: #9b59b6; color: #fff; }
+.mode-live { background: #9b59b6; color: #fff; }
 
 .moments-panel { display: flex; gap: 6px; padding: 8px; background: #0f0f0f; overflow-x: auto; min-height: 62px; align-items: center; }
 .moment-chip-wrap { position: relative; flex-shrink: 0; }
@@ -23,7 +23,7 @@ body { margin: 0; background: #141414; color: white; font-family: sans-serif; he
 .moment-del { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; background: #ff4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #fff; cursor: pointer; z-index: 2; }
 
 .editor-container { flex-grow: 1; position: relative; overflow-x: auto; overflow-y: hidden; background: #0d0d0d; touch-action: pan-x; }
-#waveform { position: absolute; top: 30px; left: 0; height: 130px; }
+#waveform { position: absolute; top: 30px; left: 0; height: 130px; cursor: pointer; }
 #notes-canvas { position: absolute; top: 0; left: 0; z-index: 10; touch-action: none; }
 #playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #ff4444; z-index: 15; display: none; pointer-events: none; box-shadow: 0 0 5px #ff4444; }
 
@@ -54,7 +54,7 @@ body { margin: 0; background: #141414; color: white; font-family: sans-serif; he
 </div>
 
 <div class="moments-panel" id="moments-panel"></div>
-<div class="hint" id="hint">📼 Звук = черновик</div>
+<div class="hint" id="hint">Тап по волне/пустому месту — перемотка. 🎹 Живой — слышны правки.</div>
 
 <div class="editor-container" id="editor-container">
     <div id="waveform"></div>
@@ -73,7 +73,7 @@ body { margin: 0; background: #141414; color: white; font-family: sans-serif; he
 <div class="actions">
     <button class="btn btn-gray" onclick="tg.close()">✕</button>
     <button class="btn btn-blue" onclick="togglePlay()" id="play-btn">▶</button>
-    <button class="btn btn-purple" onclick="toggleMode()" id="mode-btn">🎹 Синтез</button>
+    <button class="btn btn-purple" onclick="toggleMode()" id="mode-btn">🎹 Живой</button>
     <button class="btn btn-green" onclick="save()">✓ Готово</button>
 </div>
 
@@ -118,7 +118,6 @@ const mainHz = parseFloat(urlParams.get('main_hz') || "0");
 const accentHz = parseFloat(urlParams.get('accent_hz') || "0");
 const bpm = parseFloat(urlParams.get('bpm') || "120");
 
-// Парсим бочки из URL
 let kicks = [];
 const kicksStr = urlParams.get('kicks');
 if (kicksStr) {
@@ -126,7 +125,6 @@ if (kicksStr) {
 }
 console.log('[kicks]', kicks.length);
 
-// Fallback: если бочек нет — генерим по BPM-сетке
 function getKicks() {
     if (kicks.length > 0) return kicks;
     if (!bpm || bpm <= 0) return [];
@@ -150,18 +148,16 @@ let pendingMomentBox = { x1: null, x2: null };
 let draggedMoment = null;
 let dropTargetGapId = null;
 
-let playbackMode = 'draft';
+// 'draft' = result.mp3 | 'live' = inst.mp3 + синтез из notes
+let currentMode = 'draft';
+
 let audioCtx = null;
-let bassBus = null;
-let scheduledNodes = [];
-let synthBuffer = null;
+let liveSynthNodes = [];
+let liveBassGain = null;
 
 function initAudio() {
     if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        bassBus = audioCtx.createGain();
-        bassBus.gain.value = 1.0;
-        bassBus.connect(audioCtx.destination);
     }
     if (audioCtx.state === 'suspended') audioCtx.resume();
 }
@@ -209,6 +205,7 @@ const canvas = document.getElementById('notes-canvas');
 const ctx = canvas.getContext('2d');
 const container = document.getElementById('editor-container');
 const playhead = document.getElementById('playhead');
+const waveformEl = document.getElementById('waveform');
 
 function resizeCanvas() {
     const w = duration * PPS + 20;
@@ -217,6 +214,7 @@ function resizeCanvas() {
     canvas.height = h;
     canvas.style.width = w + 'px';
     canvas.style.height = h + 'px';
+    waveformEl.style.width = w + 'px';
 }
 resizeCanvas();
 window.addEventListener('resize', () => { resizeCanvas(); draw(); });
@@ -238,6 +236,188 @@ else if (instUrl) wavesurfer.load(instUrl);
 
 wavesurfer.on('ready', () => { resizeCanvas(); draw(); });
 
+// ============ ПЕРЕМОТКА ПО ВОЛНЕ ============
+waveformEl.addEventListener('pointerdown', (e) => {
+    if (gapMode) return; // не мешаем режиму создания промежутка
+    const rect = waveformEl.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const time = Math.max(0, Math.min(duration, x / PPS));
+    seekTo(time);
+});
+
+// ============ LIVE SYNTH ============
+function startLiveSynth(fromTime) {
+    if (currentMode !== 'live') return;
+    initAudio();
+    if (!audioCtx) return;
+    audioCtx.resume();
+    stopLiveSynth();
+
+    const t0 = audioCtx.currentTime + 0.05;
+
+    if (!liveBassGain) {
+        liveBassGain = audioCtx.createGain();
+        liveBassGain.gain.value = Math.pow(10, 9.0 / 20);
+
+        const hp = audioCtx.createBiquadFilter();
+        hp.type = 'highpass';
+        hp.frequency.value = 20;
+
+        const comp = audioCtx.createDynamicsCompressor();
+        comp.threshold.value = -12;
+        comp.knee.value = 0;
+        comp.ratio.value = 3;
+        comp.attack.value = 0.003;
+        comp.release.value = 0.1;
+
+        liveBassGain.connect(hp);
+        hp.connect(comp);
+        comp.connect(audioCtx.destination);
+    }
+
+    let count = 0;
+    for (const note of notes) {
+        if (note.start + note.dur < fromTime) continue;
+        const actualStart = Math.max(note.start, fromTime);
+        const offset = actualStart - note.start;
+        const dur = note.dur - offset;
+        if (dur < 0.03) continue;
+        const when = t0 + (actualStart - fromTime);
+
+        const osc = audioCtx.createOscillator();
+        const env = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = note.freq;
+
+        const A = 0.003;
+        const R = Math.min(0.08, dur * 0.3);
+        const S = 0.55;
+        env.gain.setValueAtTime(0, when);
+        if (dur > A + R + 0.01) {
+            const decayT = Math.min(dur * 0.3, dur - A - R);
+            env.gain.linearRampToValueAtTime(1.0, when + A);
+            env.gain.linearRampToValueAtTime(S, when + A + decayT);
+            env.gain.setValueAtTime(S, when + dur - R);
+            env.gain.linearRampToValueAtTime(0, when + dur);
+        } else {
+            env.gain.linearRampToValueAtTime(S, when + dur * 0.5);
+            env.gain.linearRampToValueAtTime(0, when + dur);
+        }
+
+        osc.connect(env);
+        env.connect(liveBassGain);
+        osc.start(when);
+        osc.stop(when + dur + 0.02);
+        liveSynthNodes.push(osc);
+        count++;
+    }
+    console.log(`[live] синтез ${count} нот с ${fromTime.toFixed(2)}s`);
+}
+
+function stopLiveSynth() {
+    liveSynthNodes.forEach(n => { try { n.stop(); } catch(e){} });
+    liveSynthNodes = [];
+}
+
+function resynthIfLive() {
+    if (currentMode === 'live' && wavesurfer.isPlaying()) {
+        stopLiveSynth();
+        startLiveSynth(wavesurfer.getCurrentTime());
+    }
+}
+
+function afterEdit() {
+    resynthIfLive();
+    draw();
+}
+
+// ============ ПЕРЕКЛЮЧЕНИЕ РЕЖИМА ============
+async function switchToLive() {
+    if (currentMode === 'live') return;
+    if (!instUrl) { setHint('Нет inst.mp3'); return; }
+
+    const wasPlaying = wavesurfer.isPlaying();
+    const curTime = wavesurfer.getCurrentTime();
+
+    stopLiveSynth();
+    currentMode = 'live';
+    updateModeBadge();
+
+    try {
+        await wavesurfer.load(instUrl);
+        wavesurfer.setVolume(parseFloat(document.getElementById('vol-inst').value) / 100);
+        wavesurfer.seekTo(curTime / Math.max(duration, 0.001));
+        if (wasPlaying) {
+            await wavesurfer.play();
+            startLiveSynth(curTime);
+        }
+        setHint('🎹 Живой режим: правки слышны сразу');
+    } catch(e) {
+        console.error(e);
+        setHint('Ошибка загрузки inst');
+    }
+}
+
+async function switchToDraft() {
+    if (currentMode === 'draft') return;
+    if (!audioUrl) { setHint('Нет result.mp3'); return; }
+
+    const wasPlaying = wavesurfer.isPlaying();
+    const curTime = wavesurfer.getCurrentTime();
+
+    stopLiveSynth();
+    currentMode = 'draft';
+    updateModeBadge();
+
+    try {
+        await wavesurfer.load(audioUrl);
+        wavesurfer.setVolume(parseFloat(document.getElementById('vol-inst').value) / 100);
+        wavesurfer.seekTo(curTime / Math.max(duration, 0.001));
+        if (wasPlaying) await wavesurfer.play();
+        setHint('📼 Черновик: звук 1:1 как result.mp3');
+    } catch(e) {
+        console.error(e);
+        setHint('Ошибка загрузки result');
+    }
+}
+
+function toggleMode() {
+    if (currentMode === 'draft') switchToLive();
+    else switchToDraft();
+}
+
+function updateModeBadge() {
+    const badge = document.getElementById('mode-badge');
+    const btn = document.getElementById('mode-btn');
+    if (currentMode === 'live') {
+        badge.innerText = '🎹 Живой';
+        badge.className = 'mode-badge mode-live';
+        btn.innerText = '📼 Черновик';
+    } else {
+        badge.innerText = '📼 Черновик';
+        badge.className = 'mode-badge mode-draft';
+        btn.innerText = '🎹 Живой';
+    }
+}
+
+// ============ SEEK ============
+function seekTo(time) {
+    time = Math.max(0, Math.min(duration, time));
+    const ratio = time / Math.max(duration, 0.001);
+    wavesurfer.seekTo(ratio);
+    playhead.style.left = (time * PPS) + 'px';
+    playhead.style.display = 'block';
+
+    if (currentMode === 'live' && wavesurfer.isPlaying()) {
+        stopLiveSynth();
+        startLiveSynth(time);
+    }
+    const w = container.clientWidth;
+    const x = time * PPS;
+    if (x > w / 2) container.scrollLeft = x - w / 2;
+}
+
+// ============ DRAW ============
 function freqToY(freq) {
     const noteAreaH = canvas.height - NOTE_TOP - NOTE_BOTTOM;
     const norm = Math.max(0, Math.min(1, (freq - 20) / 180));
@@ -408,6 +588,7 @@ function draw() {
     }
 }
 
+// ============ HIT TEST ============
 function hitTestNote(x, y) {
     for (let i = notes.length - 1; i >= 0; i--) {
         const note = notes[i];
@@ -483,8 +664,8 @@ function handleTap(x, y) {
         momentMode = false;
         document.getElementById('btn-moment').classList.remove('btn-active');
         setHint(selectedNotes.length === 0
-            ? 'В этом диапазоне нет нот'
-            : `Выделено ${selectedNotes.length} нот. Жми 💾 ещё`);
+            ? 'Нет нот в диапазоне'
+            : `Выделено ${selectedNotes.length} нот`);
         draw();
         return;
     }
@@ -520,6 +701,8 @@ function handleTap(x, y) {
         selectedGap = null;
         draw();
     } else {
+        // ПЕРЕМОТКА
+        seekTo(time);
         selectedNotes = [];
         selectedGap = null;
         draw();
@@ -534,7 +717,7 @@ function startGapSelection() {
     gapMode = true;
     pendingGapStart = null;
     document.getElementById('btn-gap').classList.add('btn-active');
-    setHint('Тапните в место НАЧАЛА промежутка');
+    setHint('Тапни НАЧАЛО промежутка');
     draw();
 }
 
@@ -555,7 +738,7 @@ function deleteGap(gapId) {
 
 function deleteSelectedGap() {
     if (!selectedGap) {
-        setHint('Сначала тапни на границу промежутка');
+        setHint('Тапни на границу промежутка');
         return;
     }
     const name = selectedGap.name;
@@ -566,7 +749,7 @@ function deleteSelectedGap() {
 
 function moveEdge(dir) {
     if (!selectedGap || !selectedEdge) {
-        setHint('Тапни на конкретную границу (← или →)');
+        setHint('Тапни на конкретную границу');
         return;
     }
     const step = 0.01 * dir;
@@ -578,21 +761,18 @@ function moveEdge(dir) {
     draw();
 }
 
-// ============ ⚡ АВТО (заполнить выбранный промежуток) ============
 function autoFillSelectedGap() {
     if (!selectedGap) {
-        setHint('Сначала тапни на границу промежутка');
+        setHint('Тапни на границу промежутка');
         return;
     }
     const gap = selectedGap;
-
     notes = notes.filter(n => !(n.start >= gap.start - 0.01 && n.start < gap.end + 0.01));
 
     const allKicks = getKicks();
     const gapKicks = allKicks.filter(k => k >= gap.start && k <= gap.end);
-
     if (gapKicks.length === 0) {
-        setHint(`В ${gap.name} нет бочек`);
+        setHint(`Нет бочек в ${gap.name}`);
         draw();
         return;
     }
@@ -606,12 +786,10 @@ function autoFillSelectedGap() {
         const k = gapKicks[i];
         const nextK = (i + 1 < gapKicks.length) ? gapKicks[i + 1] : gap.end;
         const interval = nextK - k;
-
         const accentDur = Math.min(ACCENT_DUR, interval - MIN_GAP);
         if (accentDur >= 0.05) {
             notes.push({ start: k, dur: accentDur, freq: ACCENT_HZ });
         }
-
         const mainStart = k + accentDur + MIN_GAP;
         const mainEnd = nextK - MIN_GAP;
         const mainDur = mainEnd - mainStart;
@@ -621,30 +799,22 @@ function autoFillSelectedGap() {
     }
 
     notes.sort((a, b) => a.start - b.start);
-    setHint(`Заполнено ${gapKicks.length} бочек в ${gap.name}`);
-    draw();
+    setHint(`Заполнено ${gapKicks.length} бочек`);
+    afterEdit();
 }
 
-// ============ 🔍 НАЙТИ ПУСТОТЫ (автодетект + копирование из донора) ============
 function autoDetectAndFillEmpty() {
     const allKicks = getKicks();
-    if (allKicks.length < 4) {
-        setHint('Мало бочек для анализа');
-        return;
-    }
-    if (notes.length === 0) {
-        setHint('Нет нот для анализа');
+    if (allKicks.length < 4 || notes.length === 0) {
+        setHint('Мало данных для анализа');
         return;
     }
 
     const COVER_TOL = 0.02;
-
-    // 1. Определяем какие бочки покрыты нотами
     const covered = allKicks.map(k =>
         notes.some(n => n.start <= k - COVER_TOL && k <= n.start + n.dur - COVER_TOL)
     );
 
-    // 2. Группируем подряд идущие непокрытые бочки в runs
     const runs = [];
     let runStart = -1;
     for (let i = 0; i <= allKicks.length; i++) {
@@ -654,139 +824,87 @@ function autoDetectAndFillEmpty() {
         } else {
             if (runStart !== -1) {
                 const count = i - runStart;
-                if (count >= 2) {
-                    runs.push({ startIdx: runStart, endIdx: i - 1, count });
-                }
+                if (count >= 2) runs.push({ startIdx: runStart, endIdx: i - 1, count });
                 runStart = -1;
             }
         }
     }
 
     if (runs.length === 0) {
-        setHint('Пустот с бочками без баса не найдено');
+        setHint('Пустот не найдено');
         return;
     }
 
-    console.log(`[auto] найдено пустот: ${runs.length}`);
-
-    // 3. Для каждой пустоты ищем донора — участок где интервалы бочек совпадают и есть ноты
     const MATCH_TOL = 0.08;
-    let filled = 0;
-    let skipped = 0;
+    let filled = 0, skipped = 0;
 
     for (const run of runs) {
         const runKicks = allKicks.slice(run.startIdx, run.endIdx + 1);
         const emptyStart = runKicks[0];
-        const emptyEnd = (run.endIdx + 1 < allKicks.length)
-            ? allKicks[run.endIdx + 1]
-            : duration;
-
-        // Интервалы пустого паттерна
+        const emptyEnd = (run.endIdx + 1 < allKicks.length) ? allKicks[run.endIdx + 1] : duration;
         const emptyIntervals = [];
         for (let i = 1; i < runKicks.length; i++) {
             emptyIntervals.push(runKicks[i] - runKicks[i - 1]);
         }
 
-        let bestDonor = null;
-        let bestScore = -1;
-
+        let bestDonor = null, bestScore = -1;
         for (let startIdx = 0; startIdx + run.count <= allKicks.length; startIdx++) {
-            // Не берём донора из самого пустого run
             if (!(startIdx + run.count - 1 < run.startIdx || startIdx > run.endIdx)) continue;
-
-            let score = 0;
-            let match = true;
+            let score = 0, match = true;
             for (let i = 0; i < emptyIntervals.length; i++) {
                 const dInt = allKicks[startIdx + i + 1] - allKicks[startIdx + i];
                 const diff = Math.abs(dInt - emptyIntervals[i]);
-                if (diff < MATCH_TOL) {
-                    score += 1 - diff / MATCH_TOL;
-                } else {
-                    match = false;
-                    break;
-                }
+                if (diff < MATCH_TOL) score += 1 - diff / MATCH_TOL;
+                else { match = false; break; }
             }
             if (!match) continue;
-
             const dStart = allKicks[startIdx];
-            const dEnd = (startIdx + run.count < allKicks.length)
-                ? allKicks[startIdx + run.count]
-                : duration;
-
+            const dEnd = (startIdx + run.count < allKicks.length) ? allKicks[startIdx + run.count] : duration;
             const donorNotes = notes.filter(n => n.start >= dStart - 0.05 && n.start < dEnd + 0.05);
             if (donorNotes.length === 0) continue;
-
             if (score > bestScore) {
                 bestScore = score;
-                bestDonor = { start: dStart, end: dEnd, notes: donorNotes, startIdx };
+                bestDonor = { start: dStart, end: dEnd, notes: donorNotes };
             }
         }
 
-        if (!bestDonor) {
-            skipped++;
-            console.log(`[auto] run @${emptyStart.toFixed(2)}s — донор не найден`);
-            continue;
-        }
+        if (!bestDonor) { skipped++; continue; }
 
-        // 4. Копируем ноты из донора со смещением
         const offset = emptyStart - bestDonor.start;
-
         notes = notes.filter(n => !(n.start >= emptyStart - 0.05 && n.start < emptyEnd - 0.01));
-
-        let copied = 0;
         for (const dn of bestDonor.notes) {
             const newStart = dn.start + offset;
             const newEnd = Math.min(newStart + dn.dur, emptyEnd - 0.01);
             const finalDur = newEnd - newStart;
             if (finalDur >= 0.03) {
                 notes.push({ start: newStart, dur: finalDur, freq: dn.freq });
-                copied++;
             }
         }
-        console.log(`[auto] run @${emptyStart.toFixed(2)}s — скопировано ${copied} нот из @${bestDonor.start.toFixed(2)}s`);
         filled++;
     }
 
     notes.sort((a, b) => a.start - b.start);
     setHint(`Пустот: ${runs.length} · заполнено: ${filled} · пропущено: ${skipped}`);
-    draw();
+    afterEdit();
 }
 
-// ============ ✂️ РЕЗАТЬ ДЛИННЫЕ (нарезка по бочкам) ============
 function splitLongNotesByKicks() {
     const allKicks = getKicks();
-    if (allKicks.length === 0) {
-        setHint('Нет бочек для нарезки');
-        return;
-    }
+    if (allKicks.length === 0) return;
 
-    const MIN_GAP = 0.04;      // 40 мс пауза перед бочкой
-    const MAX_NOTE_DUR = 0.4;  // резать если длиннее 400 мс
-
+    const MIN_GAP = 0.04;
+    const MAX_NOTE_DUR = 0.4;
     let splitCount = 0;
     const result = [];
 
     for (const note of notes) {
-        if (note.dur <= MAX_NOTE_DUR) {
-            result.push(note);
-            continue;
-        }
-
-        // Бочки внутри ноты (с отступом чтобы не резать на краях)
+        if (note.dur <= MAX_NOTE_DUR) { result.push(note); continue; }
         const kicksInside = allKicks.filter(k =>
-            k > note.start + MIN_GAP + 0.02 &&
-            k < note.start + note.dur - MIN_GAP - 0.02
-        );
-
-        if (kicksInside.length === 0) {
-            result.push(note);
-            continue;
-        }
+            k > note.start + MIN_GAP + 0.02 && k < note.start + note.dur - MIN_GAP - 0.02);
+        if (kicksInside.length === 0) { result.push(note); continue; }
 
         const noteEnd = note.start + note.dur;
-        let cursor = note.start;
-        let parts = 0;
-
+        let cursor = note.start, parts = 0;
         for (const k of kicksInside) {
             const partEnd = k - MIN_GAP;
             const partDur = partEnd - cursor;
@@ -796,20 +914,18 @@ function splitLongNotesByKicks() {
             }
             cursor = k;
         }
-
         const lastDur = noteEnd - cursor;
         if (lastDur >= 0.03) {
             result.push({ start: cursor, dur: lastDur, freq: note.freq });
             parts++;
         }
-
         if (parts > 1) splitCount++;
     }
 
     notes = result;
     notes.sort((a, b) => a.start - b.start);
-    setHint(`Разрезано ${splitCount} длинных нот по бочкам`);
-    draw();
+    setHint(`Разрезано ${splitCount} длинных нот`);
+    afterEdit();
 }
 
 function cancelMode() {
@@ -828,26 +944,19 @@ function saveAsMoment() {
         momentMode = true;
         pendingMomentBox = { x1: null, x2: null };
         document.getElementById('btn-moment').classList.add('btn-active');
-        setHint('Тапните в место начала выделения');
+        setHint('Тапни начало');
         draw();
         return;
     }
-    if (moments.length >= 4) {
-        setHint('Максимум 4 момента');
-        return;
-    }
+    if (moments.length >= 4) { setHint('Максимум 4'); return; }
     const sorted = [...selectedNotes].sort((a, b) => a.start - b.start);
     const baseStart = sorted[0].start;
-    const momentNotes = sorted.map(n => ({
-        start: n.start - baseStart,
-        dur: n.dur,
-        freq: n.freq,
-    }));
+    const momentNotes = sorted.map(n => ({ start: n.start - baseStart, dur: n.dur, freq: n.freq }));
     const id = 'mom_' + Date.now();
     const name = 'Момент ' + (moments.length + 1);
     moments.push({ id, name, notes: momentNotes });
     renderMomentsPanel();
-    setHint(`Сохранён ${name} (${momentNotes.length} нот)`);
+    setHint(`Сохранён ${name}`);
     selectedNotes = [];
     draw();
 }
@@ -862,7 +971,7 @@ function renderMomentsPanel() {
         <div class="moment-chip-wrap">
             <div class="moment-chip" data-moment-id="${m.id}">
                 <span>${m.name}</span>
-                <span class="sub">${m.notes.length} нот · ${(m.notes[m.notes.length - 1].start + m.notes[m.notes.length - 1].dur).toFixed(2)}s</span>
+                <span class="sub">${m.notes.length} нот</span>
             </div>
             <div class="moment-del" data-del-moment="${m.id}">×</div>
         </div>
@@ -881,7 +990,7 @@ function renderMomentsPanel() {
             const id = chip.dataset.momentId;
             draggedMoment = moments.find(m => m.id === id);
             chip.setPointerCapture(e.pointerId);
-            setHint(`Тащите "${draggedMoment.name}" в промежуток`);
+            setHint(`Тащите "${draggedMoment.name}"`);
         });
         chip.addEventListener('pointermove', (e) => {
             if (!draggedMoment) return;
@@ -892,10 +1001,10 @@ function renderMomentsPanel() {
                 const t = x / PPS;
                 const target = gaps.find(g => t >= g.start && t <= g.end);
                 dropTargetGapId = target ? target.id : null;
-                if (target) setHint(`Отпустите → ${target.name}`);
                 draw();
-            } else {
-                if (dropTargetGapId) { dropTargetGapId = null; draw(); }
+            } else if (dropTargetGapId) {
+                dropTargetGapId = null;
+                draw();
             }
         });
         chip.addEventListener('pointerup', (e) => {
@@ -905,9 +1014,7 @@ function renderMomentsPanel() {
                 const x = e.clientX - rect.left;
                 const t = x / PPS;
                 const target = gaps.find(g => t >= g.start && t <= g.end);
-                if (target) {
-                    insertMomentIntoGap(draggedMoment, target);
-                }
+                if (target) insertMomentIntoGap(draggedMoment, target);
             }
             draggedMoment = null;
             dropTargetGapId = null;
@@ -932,108 +1039,71 @@ function insertMomentIntoGap(moment, gap) {
     moment.notes.forEach(mn => {
         const newStart = gap.start + mn.start;
         const newEnd = Math.min(newStart + mn.dur, gap.end);
-        const finalDur = newEnd - newStart;
-        if (finalDur >= 0.03) {
-            notes.push({ start: newStart, dur: finalDur, freq: mn.freq });
+        if (newEnd - newStart >= 0.03) {
+            notes.push({ start: newStart, dur: newEnd - newStart, freq: mn.freq });
         }
     });
     notes.sort((a, b) => a.start - b.start);
-    setHint(`${moment.name} вставлен в ${gap.name}`);
-    draw();
+    setHint(`${moment.name} → ${gap.name}`);
+    afterEdit();
 }
 
 function splitNote() {
-    if (selectedNotes.length !== 1) return setHint('Выберите одну ноту');
+    if (selectedNotes.length !== 1) return setHint('Выбери одну');
     const note = selectedNotes[0];
     const idx = notes.indexOf(note);
     if (idx === -1) return;
     const halfDur = note.dur / 2;
     if (halfDur < 0.05) return setHint('Слишком короткая');
-    const newNote = { start: note.start + halfDur, freq: note.freq, dur: halfDur };
+    notes.splice(idx + 1, 0, { start: note.start + halfDur, freq: note.freq, dur: halfDur });
     note.dur = halfDur;
-    notes.splice(idx + 1, 0, newNote);
     selectedNotes = [];
-    draw();
     playTapSound(note.freq);
+    afterEdit();
 }
 
 function joinNotes() {
-    if (selectedNotes.length < 2) return setHint('Выберите 2+');
+    if (selectedNotes.length < 2) return setHint('Выбери 2+');
     const sorted = [...selectedNotes].sort((a, b) => a.start - b.start);
     const start = sorted[0].start;
     const end = sorted[sorted.length - 1].start + sorted[sorted.length - 1].dur;
     const freq = sorted[0].freq;
-    const newNote = { start, freq, dur: end - start };
     notes = notes.filter(n => !selectedNotes.includes(n));
-    notes.push(newNote);
+    notes.push({ start, freq, dur: end - start });
     notes.sort((a, b) => a.start - b.start);
     selectedNotes = [];
-    draw();
-    playTapSound(newNote.freq);
+    playTapSound(freq);
+    afterEdit();
 }
 
+// ============ PLAYBACK ============
 function togglePlay() {
+    initAudio();
     if (wavesurfer.isPlaying()) {
         wavesurfer.pause();
-        stopSynth();
-        document.getElementById('play-btn').innerText = '▶';
     } else {
         wavesurfer.play();
-        if (playbackMode === 'synth') startSynth(wavesurfer.getCurrentTime());
-        document.getElementById('play-btn').innerText = '⏸';
     }
 }
 
-function startSynth(fromTime) {
-    if (!bassUrl || !audioCtx) return;
-    stopSynth();
-    audioCtx.resume();
-    const doStart = (buffer) => {
-        if (!wavesurfer.isPlaying()) return;
-        const src = audioCtx.createBufferSource();
-        src.buffer = buffer;
-        src.connect(bassBus);
-        src.start(0, Math.max(0, fromTime));
-        scheduledNodes.push(src);
-    };
-    if (synthBuffer) { doStart(synthBuffer); return; }
-    fetch(bassUrl)
-        .then(r => r.arrayBuffer())
-        .then(buf => audioCtx.decodeAudioData(buf))
-        .then(ab => { synthBuffer = ab; doStart(ab); })
-        .catch(e => console.warn('synth load err', e));
-}
-
-function stopSynth() {
-    scheduledNodes.forEach(n => { try { n.stop(); } catch(e){} });
-    scheduledNodes = [];
-}
-
-function toggleMode() {
-    playbackMode = (playbackMode === 'draft') ? 'synth' : 'draft';
-    const wasPlaying = wavesurfer.isPlaying();
-    const curTime = wavesurfer.getCurrentTime();
-    stopSynth();
-    const badge = document.getElementById('mode-badge');
-    const btn = document.getElementById('mode-btn');
-    if (playbackMode === 'synth') {
-        badge.innerText = '🎹 Синтез';
-        badge.className = 'mode-badge mode-synth';
-        btn.innerText = '📼 Черновик';
-        setHint('🎹 Синтез');
-        wavesurfer.setVolume(0);
-    } else {
-        badge.innerText = '📼 Черновик';
-        badge.className = 'mode-badge mode-draft';
-        btn.innerText = '🎹 Синтез';
-        setHint('📼 Черновик');
-        wavesurfer.setVolume(parseFloat(document.getElementById('vol-inst').value) / 100);
+wavesurfer.on('play', () => {
+    document.getElementById('play-btn').innerText = '⏸';
+    if (currentMode === 'live') {
+        startLiveSynth(wavesurfer.getCurrentTime());
     }
-    if (wasPlaying) {
-        wavesurfer.play(curTime);
-        if (playbackMode === 'synth') startSynth(curTime);
-    }
-}
+});
+
+wavesurfer.on('pause', () => {
+    document.getElementById('play-btn').innerText = '▶';
+    playhead.style.display = 'none';
+    stopLiveSynth();
+});
+
+wavesurfer.on('finish', () => {
+    document.getElementById('play-btn').innerText = '▶';
+    playhead.style.display = 'none';
+    stopLiveSynth();
+});
 
 wavesurfer.on('audioprocess', () => {
     const time = wavesurfer.getCurrentTime();
@@ -1048,21 +1118,10 @@ wavesurfer.on('audioprocess', () => {
 wavesurfer.on('seek', () => {
     const time = wavesurfer.getCurrentTime();
     playhead.style.left = (time * PPS) + 'px';
-    if (wavesurfer.isPlaying() && playbackMode === 'synth') {
-        stopSynth();
-        startSynth(time);
+    if (currentMode === 'live' && wavesurfer.isPlaying()) {
+        stopLiveSynth();
+        startLiveSynth(time);
     }
-});
-
-wavesurfer.on('pause', () => {
-    playhead.style.display = 'none';
-    stopSynth();
-    document.getElementById('play-btn').innerText = '▶';
-});
-wavesurfer.on('finish', () => {
-    playhead.style.display = 'none';
-    stopSynth();
-    document.getElementById('play-btn').innerText = '▶';
 });
 
 function formatTime(sec) {
@@ -1074,7 +1133,7 @@ function formatTime(sec) {
 document.getElementById('vol-inst').addEventListener('input', (e) => {
     const val = e.target.value;
     document.getElementById('val-inst').innerText = val + '%';
-    if (playbackMode === 'draft') wavesurfer.setVolume(val / 100);
+    wavesurfer.setVolume(val / 100);
 });
 
 async function save() {
