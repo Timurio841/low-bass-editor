@@ -121,7 +121,7 @@ const volBassFromUrl = parseFloat(urlParams.get('vol_bass') || "9.0");
 
 console.log(`[init] bpm=${bpm}, screwed=${screwedFactor}, vol_bass=${volBassFromUrl}`);
 
-// === РЕАЛЬНЫЕ КИКИ ИЗ URL (заменяют фейковую сетку) ===
+// === РЕАЛЬНЫЕ КИКИ ИЗ URL ===
 let kicks = [];
 const kicksStr = urlParams.get('kicks');
 if (kicksStr) {
@@ -131,7 +131,7 @@ console.log(`[init] kicks из URL: ${kicks.length}`);
 
 function getKicks() {
     if (kicks.length > 0) return kicks;
-    // Fallback: если нет реальных киков но есть bpm — генерим сетку
+    // Fallback: генерим сетку по bpm
     if (!bpm || bpm <= 0) return [];
     const beat = 60 / bpm;
     const arr = [];
@@ -162,10 +162,6 @@ let liveBassGain = null;
 let liveComp = null;
 let liveHP = null;
 
-// Точная синхронизация синтеза с воспроизведением
-let liveStartCtxTime = 0;      // audioCtx.currentTime в момент старта
-let liveStartSongTime = 0;     // wavesurfer.getCurrentTime() в момент старта
-
 function initAudio() {
     if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -180,8 +176,8 @@ function playTapSound(freq) {
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.type = 'sine';
-    // Учитываем screwed
-    osc.frequency.value = screwedFactor < 0.999 ? freq * screwedFactor : freq;
+    const effFreq = screwedFactor < 0.999 ? freq * screwedFactor : freq;
+    osc.frequency.value = effFreq;
     const t = audioCtx.currentTime;
     gain.gain.setValueAtTime(0, t);
     gain.gain.linearRampToValueAtTime(0.06, t + 0.008);
@@ -259,39 +255,25 @@ waveformEl.addEventListener('pointerdown', (e) => {
 // ============ LIVE SYNTH — идентично processor.py ============
 function ensureLiveChain() {
     if (liveBassGain) return;
-    // Финальный gain на мастер-микс баса — +9 dB как в processor.py
     liveBassGain = audioCtx.createGain();
-    liveBassGain.gain.value = Math.pow(10, volBassFromUrl / 20);
+    // Запас от клиппинга: peak сэмпла ~1.0 × 0.35 = 0.35 → +9dB gain = 0.99 peak
+    liveBassGain.gain.value = Math.pow(10, volBassFromUrl / 20) * 0.35;
 
-    // Highpass 20 Hz — как в processor.py
     liveHP = audioCtx.createBiquadFilter();
     liveHP.type = 'highpass';
     liveHP.frequency.value = 20;
 
-    // Компрессор — идентичные параметры
+    // Лимитер — защита от клиппинга
     liveComp = audioCtx.createDynamicsCompressor();
-    liveComp.threshold.value = -12;
+    liveComp.threshold.value = -1;
     liveComp.knee.value = 0;
-    liveComp.ratio.value = 3;
-    liveComp.attack.value = 0.003;
-    liveComp.release.value = 0.1;
+    liveComp.ratio.value = 20;
+    liveComp.attack.value = 0.001;
+    liveComp.release.value = 0.05;
 
     liveBassGain.connect(liveHP);
     liveHP.connect(liveComp);
     liveComp.connect(audioCtx.destination);
-}
-
-function buildCosineCurve(numPoints, isRelease, sustain) {
-    const arr = new Float32Array(numPoints);
-    for (let i = 0; i < numPoints; i++) {
-        const t = i / (numPoints - 1);
-        if (isRelease) {
-            arr[i] = sustain * (Math.cos(Math.PI * t) + 1) / 2;
-        } else {
-            arr[i] = (1 - Math.cos(Math.PI * t)) / 2 * sustain;
-        }
-    }
-    return arr;
 }
 
 function startLiveSynth(fromTime) {
@@ -302,16 +284,10 @@ function startLiveSynth(fromTime) {
     stopLiveSynth();
     ensureLiveChain();
 
-    // Синхронизация: currentTime в ctx + latency компенсация
-    const latency = (audioCtx.outputLatency || audioCtx.baseLatency || 0);
-    const t0 = audioCtx.currentTime + 0.05;  // старт с запасом
-    liveStartCtxTime = t0;
-    liveStartSongTime = fromTime;
+    const t0 = audioCtx.currentTime + 0.05;
 
-    // Параметры envelope — идентичны processor.py
-    const A = 0.0025;   // SINE_ATTACK_MS = 2.5
-    const R_MAX = 0.030; // SINE_RELEASE_MS = 30
-    const S = 0.95;      // SINE_SUSTAIN = 0.95
+    // Только fade 8мс по краям — форма сэмпла не меняется
+    const FADE = 0.008;
 
     let count = 0;
     for (const note of notes) {
@@ -326,31 +302,16 @@ function startLiveSynth(fromTime) {
         const env = audioCtx.createGain();
         osc.type = 'sine';
 
-        // Учитываем screwed: реальная частота синуса в замедленном треке
         const effFreq = screwedFactor < 0.999 ? note.freq * screwedFactor : note.freq;
         osc.frequency.value = effFreq;
 
-        const a = Math.min(A, dur * 0.35);
-        const r = Math.min(R_MAX, dur * 0.35);
-
+        const fade = Math.min(FADE, dur * 0.4);
         env.gain.setValueAtTime(0, when);
-
-        if (dur > a + r + 0.005) {
-            // Attack (cosine curve)
-            const na = 16;
-            const attackCurve = buildCosineCurve(na, false, S);
-            env.gain.setValueCurveAtTime(attackCurve, when, a);
-            // Sustain
-            env.gain.setValueAtTime(S, when + a + 0.001);
-            env.gain.setValueAtTime(S, when + dur - r - 0.001);
-            // Release (cosine curve)
-            const nr = 16;
-            const releaseCurve = buildCosineCurve(nr, true, S);
-            env.gain.setValueCurveAtTime(releaseCurve, when + dur - r, r);
+        env.gain.linearRampToValueAtTime(1.0, when + fade);
+        if (dur > fade * 2 + 0.005) {
+            env.gain.setValueAtTime(1.0, when + dur - fade);
+            env.gain.linearRampToValueAtTime(0, when + dur);
         } else {
-            // Короткая нота — линейный fade
-            env.gain.linearRampToValueAtTime(S, when + a);
-            env.gain.setValueAtTime(S, when + Math.max(a + 0.001, dur - r));
             env.gain.linearRampToValueAtTime(0, when + dur);
         }
 
@@ -361,7 +322,7 @@ function startLiveSynth(fromTime) {
         liveSynthNodes.push(osc);
         count++;
     }
-    console.log(`[live] синтез ${count} нот с ${fromTime.toFixed(2)}s, latency=${(latency*1000).toFixed(0)}ms`);
+    console.log(`[live] синтез ${count} нот с ${fromTime.toFixed(2)}s`);
 }
 
 function stopLiveSynth() {
@@ -384,14 +345,11 @@ function afterEdit() {
 async function switchToLive() {
     if (currentMode === 'live') return;
     if (!instUrl) { setHint('Нет inst.mp3'); return; }
-
     const wasPlaying = wavesurfer.isPlaying();
     const curTime = wavesurfer.getCurrentTime();
-
     stopLiveSynth();
     currentMode = 'live';
     updateModeBadge();
-
     try {
         await wavesurfer.load(instUrl);
         wavesurfer.setVolume(parseFloat(document.getElementById('vol-inst').value) / 100);
@@ -410,14 +368,11 @@ async function switchToLive() {
 async function switchToDraft() {
     if (currentMode === 'draft') return;
     if (!audioUrl) { setHint('Нет result.mp3'); return; }
-
     const wasPlaying = wavesurfer.isPlaying();
     const curTime = wavesurfer.getCurrentTime();
-
     stopLiveSynth();
     currentMode = 'draft';
     updateModeBadge();
-
     try {
         await wavesurfer.load(audioUrl);
         wavesurfer.setVolume(parseFloat(document.getElementById('vol-inst').value) / 100);
@@ -455,7 +410,6 @@ function seekTo(time) {
     wavesurfer.seekTo(ratio);
     playhead.style.left = (time * PPS) + 'px';
     playhead.style.display = 'block';
-
     if (currentMode === 'live' && wavesurfer.isPlaying()) {
         stopLiveSynth();
         startLiveSynth(time);
@@ -560,7 +514,6 @@ function drawPendingGap() {
     ctx.moveTo(x, NOTE_TOP);
     ctx.lineTo(x, canvas.height - NOTE_BOTTOM);
     ctx.stroke();
-
     ctx.strokeStyle = 'rgba(255, 170, 0, 0.4)';
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
@@ -569,7 +522,6 @@ function drawPendingGap() {
     ctx.lineTo(canvas.width, NOTE_TOP + 1);
     ctx.stroke();
     ctx.setLineDash([]);
-
     ctx.fillStyle = '#ffaa00';
     ctx.font = 'bold 11px Arial';
     ctx.fillText('начало ' + pendingGapStart.toFixed(2) + 's', x + 6, NOTE_TOP + 14);
@@ -709,8 +661,7 @@ function handleTap(x, y) {
         pendingMomentBox = { x1: null, x2: null };
         momentMode = false;
         document.getElementById('btn-moment').classList.remove('btn-active');
-        setHint(selectedNotes.length === 0
-            ? 'Нет нот в диапазоне'
+        setHint(selectedNotes.length === 0 ? 'Нет нот в диапазоне'
             : `Выделено ${selectedNotes.length} нот`);
         draw();
         return;
@@ -724,9 +675,7 @@ function handleTap(x, y) {
             && lastTapEdge === edgeHit.edge;
         if (isDouble) {
             deleteGap(edgeHit.gap.id);
-            lastTapTime = 0;
-            lastTapGapId = null;
-            lastTapEdge = null;
+            lastTapTime = 0; lastTapGapId = null; lastTapEdge = null;
             draw();
             return;
         }
@@ -782,10 +731,7 @@ function deleteGap(gapId) {
 }
 
 function deleteSelectedGap() {
-    if (!selectedGap) {
-        setHint('Тапни на границу промежутка');
-        return;
-    }
+    if (!selectedGap) { setHint('Тапни на границу промежутка'); return; }
     const name = selectedGap.name;
     deleteGap(selectedGap.id);
     setHint(`Удалён: ${name}`);
@@ -793,10 +739,7 @@ function deleteSelectedGap() {
 }
 
 function moveEdge(dir) {
-    if (!selectedGap || !selectedEdge) {
-        setHint('Тапни на конкретную границу');
-        return;
-    }
+    if (!selectedGap || !selectedEdge) { setHint('Тапни на конкретную границу'); return; }
     const step = 0.01 * dir;
     if (selectedEdge === 'start') {
         selectedGap.start = Math.max(0, Math.min(selectedGap.start + step, selectedGap.end - 0.05));
@@ -806,12 +749,8 @@ function moveEdge(dir) {
     draw();
 }
 
-// === ФИКС: если нет киков — используем bpm-сетку или длинную ноту ===
 function autoFillSelectedGap() {
-    if (!selectedGap) {
-        setHint('Тапни на границу промежутка');
-        return;
-    }
+    if (!selectedGap) { setHint('Тапни на границу промежутка'); return; }
     const gap = selectedGap;
     notes = notes.filter(n => !(n.start >= gap.start - 0.01 && n.start < gap.end + 0.01));
 
@@ -819,18 +758,16 @@ function autoFillSelectedGap() {
     let usedBpmFallback = false;
 
     if (gapKicks.length === 0 && bpm > 0) {
-        // Нет реальных киков, но есть bpm — ставим по сетке
         const beat = 60 / bpm;
         for (let t = gap.start; t < gap.end - 0.01; t += beat) gapKicks.push(t);
         usedBpmFallback = true;
-        console.log(`[fill_gap] fallback на bpm-сетку: ${gapKicks.length} киков`);
+        console.log(`[fill_gap] fallback на bpm-сетку: ${gapKicks.length}`);
     }
 
     const ACCENT_HZ = accentHz > 0 ? accentHz : mainHz;
     const MAIN_HZ = mainHz > 0 ? mainHz : accentHz;
 
     if (gapKicks.length === 0) {
-        // Совсем ничего — одна длинная main-нота
         const dur = gap.end - gap.start;
         if (dur >= 0.05) {
             notes.push({ start: gap.start, dur: dur, freq: MAIN_HZ });
@@ -861,7 +798,6 @@ function autoFillSelectedGap() {
             notes.push({ start: mainStart, dur: mainDur, freq: MAIN_HZ });
         }
     }
-
     notes.sort((a, b) => a.start - b.start);
     const src = usedBpmFallback ? `по bpm (${bpm.toFixed(0)})` : 'по кикам';
     setHint(`Заполнено ${gapKicks.length} ${src}`);
@@ -870,10 +806,7 @@ function autoFillSelectedGap() {
 
 function autoDetectAndFillEmpty() {
     const allKicks = getKicks();
-    if (allKicks.length < 4 || notes.length === 0) {
-        setHint('Мало данных для анализа');
-        return;
-    }
+    if (allKicks.length < 4 || notes.length === 0) { setHint('Мало данных'); return; }
 
     const COVER_TOL = 0.02;
     const covered = allKicks.map(k =>
@@ -895,10 +828,7 @@ function autoDetectAndFillEmpty() {
         }
     }
 
-    if (runs.length === 0) {
-        setHint('Пустот не найдено');
-        return;
-    }
+    if (runs.length === 0) { setHint('Пустот не найдено'); return; }
 
     const MATCH_TOL = 0.08;
     let filled = 0, skipped = 0;
@@ -1170,9 +1100,7 @@ function startPlayheadLoop() {
 
 wavesurfer.on('play', () => {
     document.getElementById('play-btn').innerText = '⏸';
-    if (currentMode === 'live') {
-        startLiveSynth(wavesurfer.getCurrentTime());
-    }
+    if (currentMode === 'live') startLiveSynth(wavesurfer.getCurrentTime());
     startPlayheadLoop();
 });
 
@@ -1228,7 +1156,7 @@ async function save() {
         job_id: jobId,
         job_dir: jobDir,
         vol_inst: document.getElementById('vol-inst').value,
-        vol_bass: volBassFromUrl,  // фикс из URL — стабильная громкость
+        vol_bass: volBassFromUrl,
     }));
     tg.close();
 }
