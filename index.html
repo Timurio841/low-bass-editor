@@ -24,28 +24,20 @@
     --warn: #ffb020;
     --danger: #ff4466;
     --pink: #ff5cae;
-    --radius: 14px;
-    --radius-sm: 10px;
 }
 
 html, body {
-    height: 100vh;
-    overflow: hidden;
-    background: var(--bg);
-    color: var(--text);
+    height: 100vh; overflow: hidden;
+    background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
-    font-size: 14px;
-    -webkit-font-smoothing: antialiased;
+    font-size: 14px; -webkit-font-smoothing: antialiased;
     user-select: none;
 }
-
 body {
-    display: flex;
-    flex-direction: column;
+    display: flex; flex-direction: column;
     background: radial-gradient(ellipse 120% 60% at 50% 0%, #1a1a40 0%, #0a0a14 60%);
 }
 
-/* Topbar */
 .topbar {
     display: flex; align-items: center; justify-content: space-between;
     padding: 12px 14px;
@@ -56,31 +48,16 @@ body {
 }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 15px; letter-spacing: -0.3px; }
 .brand-icon { font-size: 18px; filter: drop-shadow(0 0 8px rgba(108,92,231,0.6)); }
-.brand-text {
-    background: linear-gradient(135deg, #fff 0%, #a78bfa 100%);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
+.brand-text { background: linear-gradient(135deg, #fff 0%, #a78bfa 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
 .badges { display: flex; align-items: center; gap: 6px; }
-.badge {
-    padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;
-    letter-spacing: 0.2px; border: 1px solid var(--border-bright);
-}
+.badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.2px; border: 1px solid var(--border-bright); }
 .badge-draft { background: linear-gradient(135deg, #2a2a4a, #1a1a30); color: #b0b0d0; }
-.badge-live {
-    background: linear-gradient(135deg, var(--pink), var(--primary)); color: #fff;
-    box-shadow: 0 0 12px rgba(255,92,174,0.5); border-color: transparent;
-}
-.badge-time {
-    background: rgba(0,217,255,0.1); color: var(--accent); border-color: rgba(0,217,255,0.3);
-    font-variant-numeric: tabular-nums; font-family: 'SF Mono','Monaco',monospace;
-}
+.badge-live { background: linear-gradient(135deg, var(--pink), var(--primary)); color: #fff; box-shadow: 0 0 12px rgba(255,92,174,0.5); border-color: transparent; }
+.badge-time { background: rgba(0,217,255,0.1); color: var(--accent); border-color: rgba(0,217,255,0.3); font-variant-numeric: tabular-nums; font-family: 'SF Mono','Monaco',monospace; }
 
-/* Moments */
 .moments-panel {
     display: flex; gap: 8px; padding: 10px 12px;
-    background: rgba(0,0,0,0.3);
-    overflow-x: auto; min-height: 62px; align-items: center;
+    background: rgba(0,0,0,0.3); overflow-x: auto; min-height: 62px; align-items: center;
     scrollbar-width: none; border-bottom: 1px solid var(--border);
 }
 .moments-panel::-webkit-scrollbar { display: none; }
@@ -89,7 +66,7 @@ body {
 .moment-chip {
     min-width: 82px; padding: 10px 12px;
     background: linear-gradient(135deg, var(--primary), #4a3faf);
-    border-radius: var(--radius-sm); font-size: 11px; font-weight: 700;
+    border-radius: 10px; font-size: 11px; font-weight: 700;
     display: flex; flex-direction: column; gap: 3px;
     user-select: none; touch-action: none; cursor: grab;
     box-shadow: 0 2px 8px rgba(108,92,231,0.35), inset 0 1px 0 rgba(255,255,255,0.1);
@@ -105,18 +82,15 @@ body {
     box-shadow: 0 2px 6px rgba(255,68,102,0.45);
 }
 
-/* Hint */
 .hint {
     padding: 8px 14px;
     background: rgba(255,176,32,0.07); color: var(--warn);
     font-size: 11.5px; text-align: center; min-height: 32px;
     display: flex; align-items: center; justify-content: center;
     border-bottom: 1px solid rgba(255,176,32,0.12);
-    font-weight: 500; transition: background 0.2s, color 0.2s;
-    line-height: 1.3;
+    font-weight: 500; line-height: 1.3;
 }
 
-/* Editor */
 .editor-container {
     flex: 1; position: relative;
     overflow-x: auto; overflow-y: hidden;
@@ -137,16 +111,13 @@ body {
     box-shadow: 0 0 12px var(--accent), 0 0 4px var(--accent);
 }
 
-/* Seek indicator */
 .seek-indicator {
     position: fixed; top: 45%; left: 50%;
     transform: translate(-50%, -50%) scale(0.85);
-    background: rgba(6,6,16,0.92);
-    color: var(--accent); font-size: 30px; font-weight: 900;
-    padding: 12px 26px; border-radius: 22px;
-    pointer-events: none; opacity: 0;
-    transition: opacity 0.1s, transform 0.1s;
-    z-index: 100;
+    background: rgba(6,6,16,0.92); color: var(--accent);
+    font-size: 30px; font-weight: 900; padding: 12px 26px;
+    border-radius: 22px; pointer-events: none; opacity: 0;
+    transition: opacity 0.1s, transform 0.1s; z-index: 100;
     font-variant-numeric: tabular-nums; letter-spacing: 1px;
     font-family: 'SF Mono','Monaco',monospace;
     border: 1px solid rgba(0,217,255,0.35);
@@ -154,53 +125,38 @@ body {
 }
 .seek-indicator.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 
-/* Controls */
 .controls {
     background: linear-gradient(180deg, var(--bg-soft), var(--bg));
-    padding: 10px 12px 12px;
-    display: flex; flex-direction: column; gap: 8px;
+    padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px;
     z-index: 20; border-top: 1px solid var(--border);
 }
-
-.slider-row {
-    display: flex; align-items: center; gap: 10px;
-    font-size: 12px; color: var(--text-dim); font-weight: 600;
-}
+.slider-row { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-dim); font-weight: 600; }
 .slider-row > span:first-child { min-width: 42px; text-transform: uppercase; letter-spacing: 0.5px; font-size: 10px; }
-.slider-row input[type=range] {
-    flex: 1; height: 6px; -webkit-appearance: none;
-    background: linear-gradient(90deg, var(--primary), var(--primary-bright));
-    border-radius: 3px; outline: none;
-}
+.slider-row input[type=range] { flex: 1; height: 6px; -webkit-appearance: none; background: linear-gradient(90deg, var(--primary), var(--primary-bright)); border-radius: 3px; outline: none; }
 .slider-row input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance: none; width: 20px; height: 20px;
-    border-radius: 50%; background: #fff;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.5), 0 0 0 4px rgba(108,92,231,0.35);
-    cursor: pointer;
+    -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.5), 0 0 0 4px rgba(108,92,231,0.35); cursor: pointer;
 }
 .val { min-width: 46px; text-align: right; color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .btn {
-    padding: 10px 6px; border: none; border-radius: var(--radius-sm);
+    padding: 10px 6px; border: none; border-radius: 10px;
     font-weight: 700; font-size: 11px; color: white;
-    transition: all 0.15s; display: flex; align-items: center;
-    justify-content: center; gap: 4px;
-    font-family: inherit; cursor: pointer;
-    letter-spacing: 0.2px; line-height: 1.15; min-height: 42px;
-    border: 1px solid rgba(255,255,255,0.08);
-    position: relative;
+    transition: all 0.15s; display: flex; align-items: center; justify-content: center; gap: 4px;
+    font-family: inherit; cursor: pointer; letter-spacing: 0.2px; line-height: 1.15;
+    min-height: 42px; border: 1px solid rgba(255,255,255,0.08); position: relative;
 }
 .btn:active { transform: scale(0.96); }
-.btn-gray    { background: linear-gradient(135deg, #2a2a3e, #1a1a2a); color: #c0c0d8; }
-.btn-green   { background: linear-gradient(135deg, var(--success), #00b878); color: #001a10; box-shadow: 0 2px 8px rgba(0,232,150,0.25); }
-.btn-blue    { background: linear-gradient(135deg, var(--primary), #4a3faf); box-shadow: 0 2px 8px rgba(108,92,231,0.3); }
-.btn-orange  { background: linear-gradient(135deg, var(--warn), #cc8000); color: #1a0f00; box-shadow: 0 2px 8px rgba(255,176,32,0.2); }
-.btn-purple  { background: linear-gradient(135deg, var(--pink), #cc3a88); box-shadow: 0 2px 8px rgba(255,92,174,0.25); }
-.btn-red     { background: linear-gradient(135deg, var(--danger), #cc2244); box-shadow: 0 2px 8px rgba(255,68,102,0.25); }
-.btn-cyan    { background: linear-gradient(135deg, var(--accent), #00a8cc); color: #001a20; box-shadow: 0 2px 8px rgba(0,217,255,0.2); }
-.btn-active  { box-shadow: 0 0 0 2px #fff inset, 0 0 14px currentColor; }
-#play-btn    { font-size: 18px; }
+.btn-gray   { background: linear-gradient(135deg, #2a2a3e, #1a1a2a); color: #c0c0d8; }
+.btn-green  { background: linear-gradient(135deg, var(--success), #00b878); color: #001a10; box-shadow: 0 2px 8px rgba(0,232,150,0.25); }
+.btn-blue   { background: linear-gradient(135deg, var(--primary), #4a3faf); box-shadow: 0 2px 8px rgba(108,92,231,0.3); }
+.btn-orange { background: linear-gradient(135deg, var(--warn), #cc8000); color: #1a0f00; box-shadow: 0 2px 8px rgba(255,176,32,0.2); }
+.btn-purple { background: linear-gradient(135deg, var(--pink), #cc3a88); box-shadow: 0 2px 8px rgba(255,92,174,0.25); }
+.btn-red    { background: linear-gradient(135deg, var(--danger), #cc2244); box-shadow: 0 2px 8px rgba(255,68,102,0.25); }
+.btn-cyan   { background: linear-gradient(135deg, var(--accent), #00a8cc); color: #001a20; box-shadow: 0 2px 8px rgba(0,217,255,0.2); }
+.btn-active { box-shadow: 0 0 0 2px #fff inset, 0 0 14px currentColor; }
+#play-btn { font-size: 18px; }
 </style>
 </head>
 <body>
@@ -318,19 +274,15 @@ function playTapSound(freq) {
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.type = 'sine';
-    const effFreq = screwedFactor < 0.999 ? freq * screwedFactor : freq;
-    osc.frequency.value = effFreq;
+    osc.frequency.value = screwedFactor < 0.999 ? freq * screwedFactor : freq;
     const t = audioCtx.currentTime;
     gain.gain.setValueAtTime(0, t);
     gain.gain.linearRampToValueAtTime(0.06, t + 0.008);
     gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start(t);
-    osc.stop(t + 0.15);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(t); osc.stop(t + 0.15);
 }
 
-// Load notes from Supabase
 if (jobId) {
     fetch(`${SUPABASE_URL}/rest/v1/temp_notes?id=eq.${jobId}&select=notes`, {
         headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
@@ -346,11 +298,9 @@ if (jobId) {
 }
 
 const PPS = 100;
-const WAVE_TOP = 30;
-const WAVE_H = 130;
+const WAVE_TOP = 30, WAVE_H = 130;
 const NOTE_TOP = WAVE_TOP + WAVE_H + 10;
-const NOTE_BOTTOM = 20;
-const NOTE_H = 14;
+const NOTE_BOTTOM = 20, NOTE_H = 14;
 
 const canvas = document.getElementById('notes-canvas');
 const ctx = canvas.getContext('2d', { alpha: true });
@@ -366,9 +316,9 @@ function resizeCanvas() {
     const h = Math.max(container.clientHeight, 300);
     CANVAS_W = w; CANVAS_H = h;
     const dpr = window.devicePixelRatio || 1;
-    canvas.width  = Math.round(w * dpr);
+    canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
-    canvas.style.width  = w + 'px';
+    canvas.style.width = w + 'px';
     canvas.style.height = h + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     waveformEl.style.width = w + 'px';
@@ -400,17 +350,11 @@ function ensureLiveChain() {
     liveBassGain = audioCtx.createGain();
     liveBassGain.gain.value = Math.pow(10, volBassFromUrl / 20) * 0.35;
     liveHP = audioCtx.createBiquadFilter();
-    liveHP.type = 'highpass';
-    liveHP.frequency.value = 20;
+    liveHP.type = 'highpass'; liveHP.frequency.value = 20;
     liveComp = audioCtx.createDynamicsCompressor();
-    liveComp.threshold.value = -1;
-    liveComp.knee.value = 0;
-    liveComp.ratio.value = 20;
-    liveComp.attack.value = 0.001;
-    liveComp.release.value = 0.05;
-    liveBassGain.connect(liveHP);
-    liveHP.connect(liveComp);
-    liveComp.connect(audioCtx.destination);
+    liveComp.threshold.value = -1; liveComp.knee.value = 0; liveComp.ratio.value = 20;
+    liveComp.attack.value = 0.001; liveComp.release.value = 0.05;
+    liveBassGain.connect(liveHP); liveHP.connect(liveComp); liveComp.connect(audioCtx.destination);
 }
 
 function startLiveSynth(fromTime) {
@@ -446,13 +390,12 @@ function startLiveSynth(fromTime) {
         liveSynthNodes.push(osc);
     }
 }
-
 function stopLiveSynth() {
     liveSynthNodes.forEach(n => { try { n.stop(); } catch(e){} });
     liveSynthNodes = [];
 }
 function resynthIfLive() {
-    if (currentMode === 'live' && wavesurfer.isPlaying()) {
+    if (currentMode === 'live' && isPlaybackActive) {
         stopLiveSynth();
         startLiveSynth(wavesurfer.getCurrentTime());
     }
@@ -462,7 +405,7 @@ function afterEdit() { resynthIfLive(); draw(); }
 async function switchToLive() {
     if (currentMode === 'live') return;
     if (!instUrl) return setHint('Нет inst.mp3');
-    const wasPlaying = wavesurfer.isPlaying();
+    const wasPlaying = isPlaybackActive;
     const curTime = wavesurfer.getCurrentTime();
     stopLiveSynth();
     currentMode = 'live';
@@ -471,15 +414,18 @@ async function switchToLive() {
         await wavesurfer.load(instUrl);
         wavesurfer.setVolume(parseFloat(document.getElementById('vol-inst').value) / 100);
         wavesurfer.seekTo(curTime / Math.max(duration, 0.001));
-        if (wasPlaying) { await wavesurfer.play(); startLiveSynth(curTime); }
+        if (wasPlaying) {
+            await wavesurfer.play();
+            startPlayheadLoop();
+            startLiveSynth(curTime);
+        }
         setHint('🎹 Live: правки слышны сразу');
     } catch(e) { console.error(e); setHint('Ошибка загрузки inst'); }
 }
-
 async function switchToDraft() {
     if (currentMode === 'draft') return;
     if (!audioUrl) return setHint('Нет result.mp3');
-    const wasPlaying = wavesurfer.isPlaying();
+    const wasPlaying = isPlaybackActive;
     const curTime = wavesurfer.getCurrentTime();
     stopLiveSynth();
     currentMode = 'draft';
@@ -488,55 +434,156 @@ async function switchToDraft() {
         await wavesurfer.load(audioUrl);
         wavesurfer.setVolume(parseFloat(document.getElementById('vol-inst').value) / 100);
         wavesurfer.seekTo(curTime / Math.max(duration, 0.001));
-        if (wasPlaying) await wavesurfer.play();
+        if (wasPlaying) {
+            await wavesurfer.play();
+            startPlayheadLoop();
+        }
         setHint('📼 Draft: 1:1 как result.mp3');
     } catch(e) { console.error(e); setHint('Ошибка загрузки result'); }
 }
-
-function toggleMode() {
-    currentMode === 'draft' ? switchToLive() : switchToDraft();
-}
-
+function toggleMode() { currentMode === 'draft' ? switchToLive() : switchToDraft(); }
 function updateModeBadge() {
     const badge = document.getElementById('mode-badge');
     const btn = document.getElementById('mode-btn');
     if (currentMode === 'live') {
-        badge.innerText = '🎹 Live';
-        badge.className = 'badge badge-live';
+        badge.innerText = '🎹 Live'; badge.className = 'badge badge-live';
         btn.innerText = '📼 Draft';
     } else {
-        badge.innerText = '📼 Draft';
-        badge.className = 'badge badge-draft';
+        badge.innerText = '📼 Draft'; badge.className = 'badge badge-draft';
         btn.innerText = '🎹 Live';
     }
 }
 
-// ============ SEEK ============
+// ============ PLAYBACK (главное) ============
+let isPlaybackActive = false;
+let playheadRafId = null;
+let suppressNextPause = false;
+let lastUserScrollAt = 0;
+let suppressScrollEvent = false;
+
+container.addEventListener('scroll', () => {
+    if (suppressScrollEvent) return;
+    lastUserScrollAt = Date.now();
+}, { passive: true });
+
+function updatePlayheadUI(time) {
+    document.getElementById('timer').innerText = formatTime(time) + ' / ' + formatTime(duration);
+    const x = time * PPS;
+    playhead.style.left = x + 'px';
+    playhead.style.display = 'block';
+}
+
+function autoScrollIfNeeded(x) {
+    const vw = container.clientWidth;
+    const vl = container.scrollLeft;
+    const vr = vl + vw;
+    if (Date.now() - lastUserScrollAt < 800) return;
+    if (x > vr - 60 || x < vl + 20) {
+        suppressScrollEvent = true;
+        container.scrollLeft = Math.max(0, x - vw * 0.3);
+        setTimeout(() => { suppressScrollEvent = false; }, 40);
+    }
+}
+
+function playheadTick() {
+    playheadRafId = null;
+    if (!isPlaybackActive) return;
+    const time = wavesurfer.getCurrentTime();
+    updatePlayheadUI(time);
+    autoScrollIfNeeded(time * PPS);
+    if (isPlaybackActive) {
+        playheadRafId = requestAnimationFrame(playheadTick);
+    }
+}
+
+function startPlayheadLoop() {
+    isPlaybackActive = true;
+    if (playheadRafId) return;
+    playheadTick(); // первый тик синхронно
+}
+
+function stopPlayheadLoop() {
+    isPlaybackActive = false;
+    if (playheadRafId) { cancelAnimationFrame(playheadRafId); playheadRafId = null; }
+}
+
 function doSeek(time, scroll = false) {
     time = Math.max(0, Math.min(duration, time));
+    const wasPlaying = isPlaybackActive;
+    suppressNextPause = true;
     wavesurfer.seekTo(time / Math.max(duration, 0.001));
-    playhead.style.left = (time * PPS) + 'px';
-    playhead.style.display = 'block';
-    if (currentMode === 'live' && wavesurfer.isPlaying()) {
+    updatePlayheadUI(time);
+    if (currentMode === 'live' && wasPlaying) {
         stopLiveSynth();
         startLiveSynth(time);
     }
+    if (wasPlaying) startPlayheadLoop();
     if (scroll) {
         const w = container.clientWidth;
         const x = time * PPS;
         if (x > w * 0.75 || x < w * 0.25) {
+            suppressScrollEvent = true;
             container.scrollLeft = Math.max(0, x - w * 0.4);
+            setTimeout(() => { suppressScrollEvent = false; }, 40);
         }
     }
 }
 
-function showSeekIndicator(time) {
-    seekIndicator.textContent = formatTime(time);
-    seekIndicator.classList.add('show');
+function togglePlay() {
+    initAudio();
+    if (wavesurfer.isPlaying()) {
+        wavesurfer.pause();
+    } else {
+        const wasActive = isPlaybackActive;
+        wavesurfer.play().then(() => {
+            if (!wasActive) startPlayheadLoop();
+        }).catch(e => { console.warn('play err', e); });
+        // Не ждём промис — стартуем сразу, чтобы полоска не стояла
+        startPlayheadLoop();
+        document.getElementById('play-btn').innerText = '⏸';
+        if (currentMode === 'live') startLiveSynth(wavesurfer.getCurrentTime());
+    }
 }
-function hideSeekIndicator() {
-    seekIndicator.classList.remove('show');
+
+wavesurfer.on('play', () => {
+    initAudio();
+    document.getElementById('play-btn').innerText = '⏸';
+    startPlayheadLoop();
+    if (currentMode === 'live') startLiveSynth(wavesurfer.getCurrentTime());
+});
+
+wavesurfer.on('pause', () => {
+    if (suppressNextPause) { suppressNextPause = false; return; }
+    document.getElementById('play-btn').innerText = '▶';
+    stopLiveSynth();
+    stopPlayheadLoop();
+    playhead.style.display = 'block'; // остаётся на месте
+});
+
+wavesurfer.on('finish', () => {
+    document.getElementById('play-btn').innerText = '▶';
+    stopLiveSynth();
+    stopPlayheadLoop();
+    playhead.style.display = 'block';
+});
+
+wavesurfer.on('timeupdate', (t) => {
+    // fallback: если по какой-то причине rAF умер, но аудио играет
+    if (!isPlaybackActive && wavesurfer.isPlaying()) startPlayheadLoop();
+    if (!isPlaybackActive) updatePlayheadUI(t);
+});
+
+function formatTime(sec) {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return m + ':' + (s < 10 ? '0' : '') + s;
 }
+
+document.getElementById('vol-inst').addEventListener('input', (e) => {
+    const val = e.target.value;
+    document.getElementById('val-inst').innerText = val + '%';
+    wavesurfer.setVolume(val / 100);
+});
 
 // ============ DRAW ============
 function freqToY(freq) {
@@ -559,11 +606,9 @@ function drawBeatGrid() {
         ctx.moveTo(x, NOTE_TOP - 5);
         ctx.lineTo(x, CANVAS_H - NOTE_BOTTOM);
         ctx.stroke();
-        t += beatDur;
-        idx++;
+        t += beatDur; idx++;
     }
 }
-
 function drawKicks() {
     const ks = getKicks();
     if (ks.length === 0) return;
@@ -585,85 +630,54 @@ function drawKicks() {
         ctx.fill();
     });
 }
-
 function drawGaps() {
     gaps.forEach(gap => {
-        const x1 = gap.start * PPS;
-        const x2 = gap.end * PPS;
+        const x1 = gap.start * PPS, x2 = gap.end * PPS;
         const isSel = (selectedGap && selectedGap.id === gap.id);
         const isTarget = (dropTargetGapId === gap.id);
-
         if (isTarget) ctx.fillStyle = 'rgba(0,232,150,0.12)';
         else if (isSel) ctx.fillStyle = 'rgba(255,92,174,0.12)';
         else ctx.fillStyle = 'rgba(108,92,231,0.06)';
         ctx.fillRect(x1, NOTE_TOP, x2 - x1, CANVAS_H - NOTE_TOP - NOTE_BOTTOM);
-
         const lineColor = isTarget ? '#00e896' : (isSel ? '#ff5cae' : '#6c5ce7');
-        ctx.strokeStyle = lineColor;
-        ctx.lineWidth = 3;
+        ctx.strokeStyle = lineColor; ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(x1 + 1.5, NOTE_TOP);
-        ctx.lineTo(x1 + 1.5, CANVAS_H - NOTE_BOTTOM);
-        ctx.moveTo(x2 - 1.5, NOTE_TOP);
-        ctx.lineTo(x2 - 1.5, CANVAS_H - NOTE_BOTTOM);
+        ctx.moveTo(x1 + 1.5, NOTE_TOP); ctx.lineTo(x1 + 1.5, CANVAS_H - NOTE_BOTTOM);
+        ctx.moveTo(x2 - 1.5, NOTE_TOP); ctx.lineTo(x2 - 1.5, CANVAS_H - NOTE_BOTTOM);
         ctx.stroke();
-
-        ctx.strokeStyle = lineColor;
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = lineColor; ctx.lineWidth = 1;
         ctx.setLineDash([4, 4]);
         ctx.beginPath();
-        ctx.moveTo(x1, NOTE_TOP + 1);
-        ctx.lineTo(x2, NOTE_TOP + 1);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
+        ctx.moveTo(x1, NOTE_TOP + 1); ctx.lineTo(x2, NOTE_TOP + 1);
+        ctx.stroke(); ctx.setLineDash([]);
         ctx.fillStyle = lineColor;
         ctx.font = 'bold 11px system-ui';
         ctx.fillText(gap.name, x1 + 6, NOTE_TOP + 14);
-        ctx.font = '10px system-ui';
-        ctx.fillStyle = '#aaa';
+        ctx.font = '10px system-ui'; ctx.fillStyle = '#aaa';
         ctx.fillText((gap.end - gap.start).toFixed(2) + 's', x1 + 6, NOTE_TOP + 28);
     });
 }
-
 function drawPendingGap() {
     if (!gapMode || pendingGapStart === null) return;
     const x = pendingGapStart * PPS;
-    ctx.strokeStyle = '#ffb020';
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#ffb020'; ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo(x, NOTE_TOP);
-    ctx.lineTo(x, CANVAS_H - NOTE_BOTTOM);
+    ctx.moveTo(x, NOTE_TOP); ctx.lineTo(x, CANVAS_H - NOTE_BOTTOM);
     ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,176,32,0.4)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255,176,32,0.4)'; ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
-    ctx.beginPath();
-    ctx.moveTo(x, NOTE_TOP + 1);
-    ctx.lineTo(CANVAS_W, NOTE_TOP + 1);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = '#ffb020';
-    ctx.font = 'bold 11px system-ui';
+    ctx.beginPath(); ctx.moveTo(x, NOTE_TOP + 1); ctx.lineTo(CANVAS_W, NOTE_TOP + 1);
+    ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#ffb020'; ctx.font = 'bold 11px system-ui';
     ctx.fillText('начало ' + pendingGapStart.toFixed(2) + 's', x + 6, NOTE_TOP + 14);
-    ctx.font = '10px system-ui';
-    ctx.fillStyle = '#ffcc66';
+    ctx.font = '10px system-ui'; ctx.fillStyle = '#ffcc66';
     ctx.fillText('тап в конец', x + 6, NOTE_TOP + 28);
 }
-
 function draw() {
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-    drawBeatGrid();
-    drawKicks();
-    drawGaps();
-    drawPendingGap();
-
-    ctx.fillStyle = '#555';
-    ctx.font = '11px system-ui';
-    for (let i = 0; i <= duration; i += 5) {
-        ctx.fillText(i + 's', i * PPS + 3, 15);
-    }
-
+    drawBeatGrid(); drawKicks(); drawGaps(); drawPendingGap();
+    ctx.fillStyle = '#555'; ctx.font = '11px system-ui';
+    for (let i = 0; i <= duration; i += 5) ctx.fillText(i + 's', i * PPS + 3, 15);
     notes.forEach(note => {
         const x = note.start * PPS;
         const w = Math.max(note.dur * PPS, 8);
@@ -671,62 +685,38 @@ function draw() {
         const isSel = selectedNotes.includes(note);
         const isAccent = accentHz > 0 && Math.abs(note.freq - accentHz) < 0.5;
         const isMain = mainHz > 0 && Math.abs(note.freq - mainHz) < 0.5;
-
         let fillTop, fillBot, outline;
-        if (isSel) {
-            fillTop = '#8b7bff'; fillBot = '#5a4dcf';
-            outline = '#fff';
-        } else if (isAccent) {
-            fillTop = '#ffb020'; fillBot = '#cc7a00';
-            outline = '#803300';
-        } else if (isMain) {
-            fillTop = '#00e896'; fillBot = '#00a868';
-            outline = '#005530';
-        } else {
-            fillTop = '#7aa8c8'; fillBot = '#4a7898';
-            outline = '#2a3a4a';
-        }
-
+        if (isSel)          { fillTop = '#8b7bff'; fillBot = '#5a4dcf'; outline = '#fff'; }
+        else if (isAccent)  { fillTop = '#ffb020'; fillBot = '#cc7a00'; outline = '#803300'; }
+        else if (isMain)    { fillTop = '#00e896'; fillBot = '#00a868'; outline = '#005530'; }
+        else                { fillTop = '#7aa8c8'; fillBot = '#4a7898'; outline = '#2a3a4a'; }
         const grad = ctx.createLinearGradient(0, y, 0, y + NOTE_H);
-        grad.addColorStop(0, fillTop);
-        grad.addColorStop(1, fillBot);
-        ctx.fillStyle = grad;
-        ctx.strokeStyle = outline;
+        grad.addColorStop(0, fillTop); grad.addColorStop(1, fillBot);
+        ctx.fillStyle = grad; ctx.strokeStyle = outline;
         ctx.lineWidth = isSel ? 1.5 : 1;
-
         if (ctx.roundRect) {
-            ctx.beginPath();
-            ctx.roundRect(x, y, w, NOTE_H, 3);
-            ctx.fill();
+            ctx.beginPath(); ctx.roundRect(x, y, w, NOTE_H, 3); ctx.fill();
             if (isSel) ctx.stroke();
         } else {
             ctx.fillRect(x, y, w, NOTE_H);
             ctx.strokeRect(x + 0.5, y + 0.5, w - 1, NOTE_H - 1);
         }
-
         if (w > 34) {
-            ctx.fillStyle = 'rgba(0,0,0,0.85)';
-            ctx.font = 'bold 10px system-ui';
+            ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.font = 'bold 10px system-ui';
             ctx.fillText(note.freq.toFixed(0) + 'Hz', x + 4, y + 11);
         }
     });
-
     if (momentMode && pendingMomentBox.x1 !== null && pendingMomentBox.x2 !== null) {
         const x1 = Math.min(pendingMomentBox.x1, pendingMomentBox.x2) * PPS;
         const x2 = Math.max(pendingMomentBox.x1, pendingMomentBox.x2) * PPS;
-        ctx.strokeStyle = '#ff5cae';
-        ctx.setLineDash([4, 4]);
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#ff5cae'; ctx.setLineDash([4, 4]); ctx.lineWidth = 2;
         ctx.strokeRect(x1, NOTE_TOP, x2 - x1, CANVAS_H - NOTE_TOP - NOTE_BOTTOM);
         ctx.setLineDash([]);
     }
     if (momentMode && pendingMomentBox.x1 !== null && pendingMomentBox.x2 === null) {
         const x = pendingMomentBox.x1 * PPS;
-        ctx.strokeStyle = '#ff5cae';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(x, NOTE_TOP);
-        ctx.lineTo(x, CANVAS_H - NOTE_BOTTOM);
+        ctx.strokeStyle = '#ff5cae'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(x, NOTE_TOP); ctx.lineTo(x, CANVAS_H - NOTE_BOTTOM);
         ctx.stroke();
     }
 }
@@ -741,7 +731,6 @@ function hitTestNote(x, y) {
     }
     return null;
 }
-
 function hitTestGapEdge(x) {
     const tol = 14;
     for (const gap of gaps) {
@@ -751,15 +740,20 @@ function hitTestGapEdge(x) {
     return null;
 }
 
-// ============ INTERACTION (scrub / tap) ============
+// ============ INTERACTION ============
 let pState = null;
+
+function showSeekIndicator(time) {
+    seekIndicator.textContent = formatTime(time);
+    seekIndicator.classList.add('show');
+}
+function hideSeekIndicator() { seekIndicator.classList.remove('show'); }
 
 canvas.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-
     const inMode = gapMode || momentMode;
     const hitNote = !inMode ? hitTestNote(x, y) : null;
     const hitEdge = !inMode ? hitTestGapEdge(x) : null;
@@ -770,8 +764,13 @@ canvas.addEventListener('pointerdown', (e) => {
         time: x / PPS, moved: false, hitNote, hitEdge, inMode, isScrubbing,
         pointerId: e.pointerId,
     };
-
     try { canvas.setPointerCapture(e.pointerId); } catch(_) {}
+
+    // Пауза rAF, чтобы не дёргать playhead во время скраба
+    if (isScrubbing && playheadRafId) {
+        cancelAnimationFrame(playheadRafId);
+        playheadRafId = null;
+    }
 
     if (isScrubbing) {
         doSeek(pState.time, false);
@@ -785,7 +784,6 @@ canvas.addEventListener('pointermove', (e) => {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     pState.lastX = x; pState.lastY = y;
-
     const dx = x - pState.startX, dy = y - pState.startY;
     if (!pState.moved && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
         pState.moved = true;
@@ -809,10 +807,17 @@ canvas.addEventListener('pointerup', (e) => {
     canvas.style.cursor = '';
     hideSeekIndicator();
 
+    // После скраба перезапускаем цикл, если проигрывание активно
+    if (isPlaybackActive && !playheadRafId) startPlayheadLoop();
+
     if (wasMoved) {
         const w = container.clientWidth;
         const x = state.lastX;
-        if (x > w * 0.75 || x < w * 0.25) container.scrollLeft = Math.max(0, x - w * 0.4);
+        if (x > w * 0.75 || x < w * 0.25) {
+            suppressScrollEvent = true;
+            container.scrollLeft = Math.max(0, x - w * 0.4);
+            setTimeout(() => { suppressScrollEvent = false; }, 40);
+        }
         return;
     }
     handleTap(state.startX, state.startY, state);
@@ -823,6 +828,7 @@ canvas.addEventListener('pointercancel', (e) => {
     pState = null;
     canvas.style.cursor = '';
     hideSeekIndicator();
+    if (isPlaybackActive && !playheadRafId) startPlayheadLoop();
 });
 
 function handleTap(x, y, state) {
@@ -846,7 +852,6 @@ function handleTap(x, y, state) {
         }
         draw(); return;
     }
-
     if (momentMode) {
         if (pendingMomentBox.x1 === null) {
             pendingMomentBox.x1 = time;
@@ -864,14 +869,12 @@ function handleTap(x, y, state) {
             : `Выделено ${selectedNotes.length} нот`);
         draw(); return;
     }
-
     if (state.hitEdge) {
         const { gap, edge } = state.hitEdge;
         selectedGap = gap; selectedEdge = edge;
         setHint(`${gap.name}: ${edge === 'start' ? 'начало' : 'конец'}`);
         draw(); return;
     }
-
     if (state.hitNote) {
         selectedNotes = [state.hitNote];
         selectedGap = null;
@@ -879,20 +882,14 @@ function handleTap(x, y, state) {
         doSeek(state.hitNote.start, false);
         draw(); return;
     }
-    // Empty tap: already handled in pointerdown
 }
 
-function setHint(text) {
-    document.getElementById('hint').innerText = text;
-}
-
+function setHint(text) { document.getElementById('hint').innerText = text; }
 function startGapSelection() {
     gapMode = true; pendingGapStart = null;
     document.getElementById('btn-gap').classList.add('btn-active');
-    setHint('Тапни НАЧАЛО промежутка');
-    draw();
+    setHint('Тапни НАЧАЛО промежутка'); draw();
 }
-
 function createGap(start, end) {
     const id = 'gap_' + Date.now();
     const name = 'Промежуток ' + (gaps.length + 1);
@@ -900,14 +897,12 @@ function createGap(start, end) {
     selectedGap = gaps[gaps.length - 1];
     selectedEdge = null;
 }
-
 function deleteGap(gapId) {
     gaps = gaps.filter(g => g.id !== gapId);
     gaps.forEach((g, i) => { g.name = 'Промежуток ' + (i + 1); });
     if (selectedGap && selectedGap.id === gapId) selectedGap = null;
     setHint('Промежуток удалён');
 }
-
 function deleteSelectedGap() {
     if (!selectedGap) return setHint('Тапни на границу промежутка');
     const name = selectedGap.name;
@@ -915,7 +910,6 @@ function deleteSelectedGap() {
     setHint(`Удалён: ${name}`);
     draw();
 }
-
 function moveEdge(dir) {
     if (!selectedGap || !selectedEdge) return setHint('Тапни на конкретную границу');
     const step = 0.01 * dir;
@@ -926,12 +920,10 @@ function moveEdge(dir) {
     }
     draw();
 }
-
 function autoFillSelectedGap() {
     if (!selectedGap) return setHint('Тапни на границу промежутка');
     const gap = selectedGap;
     notes = notes.filter(n => !(n.start >= gap.start - 0.01 && n.start < gap.end + 0.01));
-
     let gapKicks = getKicks().filter(k => k >= gap.start && k <= gap.end);
     let usedBpmFallback = false;
     if (gapKicks.length === 0 && bpm > 0) {
@@ -939,10 +931,8 @@ function autoFillSelectedGap() {
         for (let t = gap.start; t < gap.end - 0.01; t += beat) gapKicks.push(t);
         usedBpmFallback = true;
     }
-
     const ACCENT_HZ = accentHz > 0 ? accentHz : mainHz;
     const MAIN_HZ = mainHz > 0 ? mainHz : accentHz;
-
     if (gapKicks.length === 0) {
         const dur = gap.end - gap.start;
         if (dur >= 0.05) {
@@ -953,7 +943,6 @@ function autoFillSelectedGap() {
         } else setHint('Промежуток слишком короткий');
         return;
     }
-
     const ACCENT_DUR = 0.12, MIN_GAP = 0.05;
     for (let i = 0; i < gapKicks.length; i++) {
         const k = gapKicks[i];
@@ -969,7 +958,6 @@ function autoFillSelectedGap() {
     setHint(`Заполнено ${gapKicks.length} ${usedBpmFallback ? 'по bpm' : 'по кикам'}`);
     afterEdit();
 }
-
 function autoDetectAndFillEmpty() {
     const allKicks = getKicks();
     if (allKicks.length < 4 || notes.length === 0) return setHint('Мало данных');
@@ -1025,7 +1013,6 @@ function autoDetectAndFillEmpty() {
     setHint(`Пустот: ${runs.length} · заполнено: ${filled} · пропущено: ${skipped}`);
     afterEdit();
 }
-
 function splitLongNotesByKicks() {
     const allKicks = getKicks();
     if (allKicks.length === 0) return;
@@ -1050,7 +1037,6 @@ function splitLongNotesByKicks() {
     setHint(`Разрезано ${splitCount} длинных нот`);
     afterEdit();
 }
-
 function cancelMode() {
     gapMode = false; momentMode = false;
     pendingGapStart = null; pendingMomentBox = { x1: null, x2: null };
@@ -1058,7 +1044,6 @@ function cancelMode() {
     document.getElementById('btn-moment').classList.remove('btn-active');
     setHint('Отменено'); draw();
 }
-
 function saveAsMoment() {
     if (selectedNotes.length === 0) {
         momentMode = true; pendingMomentBox = { x1: null, x2: null };
@@ -1076,7 +1061,6 @@ function saveAsMoment() {
     setHint(`Сохранён ${name}`);
     selectedNotes = []; draw();
 }
-
 function renderMomentsPanel() {
     const panel = document.getElementById('moments-panel');
     if (moments.length === 0) {
@@ -1092,11 +1076,9 @@ function renderMomentsPanel() {
             <div class="moment-del" data-del-moment="${m.id}">×</div>
         </div>
     `).join('');
-
     panel.querySelectorAll('[data-del-moment]').forEach(el => {
         el.addEventListener('click', (e) => { e.stopPropagation(); deleteMoment(el.dataset.delMoment); });
     });
-
     panel.querySelectorAll('.moment-chip').forEach(chip => {
         chip.addEventListener('pointerdown', (e) => {
             e.preventDefault();
@@ -1114,9 +1096,7 @@ function renderMomentsPanel() {
                 const target = gaps.find(g => t >= g.start && t <= g.end);
                 const newTarget = target ? target.id : null;
                 if (newTarget !== dropTargetGapId) { dropTargetGapId = newTarget; draw(); }
-            } else if (dropTargetGapId) {
-                dropTargetGapId = null; draw();
-            }
+            } else if (dropTargetGapId) { dropTargetGapId = null; draw(); }
         });
         chip.addEventListener('pointerup', (e) => {
             if (!draggedMoment) return;
@@ -1134,13 +1114,11 @@ function renderMomentsPanel() {
         });
     });
 }
-
 function deleteMoment(momentId) {
     moments = moments.filter(m => m.id !== momentId);
     moments.forEach((m, i) => { m.name = 'Момент ' + (i + 1); });
     renderMomentsPanel();
 }
-
 function insertMomentIntoGap(moment, gap) {
     notes = notes.filter(n => !(n.start >= gap.start - 0.01 && n.start < gap.end + 0.01));
     moment.notes.forEach(mn => {
@@ -1152,7 +1130,6 @@ function insertMomentIntoGap(moment, gap) {
     setHint(`${moment.name} → ${gap.name}`);
     afterEdit();
 }
-
 function splitNote() {
     if (selectedNotes.length !== 1) return setHint('Выбери одну');
     const note = selectedNotes[0];
@@ -1165,7 +1142,6 @@ function splitNote() {
     selectedNotes = [];
     playTapSound(note.freq); afterEdit();
 }
-
 function joinNotes() {
     if (selectedNotes.length < 2) return setHint('Выбери 2+');
     const sorted = [...selectedNotes].sort((a, b) => a.start - b.start);
@@ -1178,76 +1154,6 @@ function joinNotes() {
     selectedNotes = [];
     playTapSound(freq); afterEdit();
 }
-
-// ============ PLAYBACK ============
-function togglePlay() {
-    initAudio();
-    if (wavesurfer.isPlaying()) wavesurfer.pause();
-    else wavesurfer.play();
-}
-
-let rafId = null;
-let userScrolled = false;
-container.addEventListener('scroll', () => {
-    userScrolled = true;
-    clearTimeout(container._scrollT);
-    container._scrollT = setTimeout(() => { userScrolled = false; }, 1500);
-});
-
-function startPlayheadLoop() {
-    if (rafId) cancelAnimationFrame(rafId);
-    const loop = () => {
-        if (!wavesurfer.isPlaying()) { rafId = null; return; }
-        const time = wavesurfer.getCurrentTime();
-        document.getElementById('timer').innerText = formatTime(time) + ' / ' + formatTime(duration);
-        const x = time * PPS;
-        playhead.style.left = x + 'px';
-        playhead.style.display = 'block';
-        if (!userScrolled) {
-            const viewLeft = container.scrollLeft;
-            const viewRight = viewLeft + container.clientWidth;
-            if (x > viewRight - 80 || x < viewLeft + 20) {
-                container.scrollLeft = Math.max(0, x - container.clientWidth * 0.4);
-            }
-        }
-        rafId = requestAnimationFrame(loop);
-    };
-    rafId = requestAnimationFrame(loop);
-}
-
-wavesurfer.on('play', () => {
-    document.getElementById('play-btn').innerText = '⏸';
-    if (currentMode === 'live') startLiveSynth(wavesurfer.getCurrentTime());
-    startPlayheadLoop();
-});
-wavesurfer.on('pause', () => {
-    document.getElementById('play-btn').innerText = '▶';
-    playhead.style.display = 'none';
-    stopLiveSynth();
-    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-});
-wavesurfer.on('finish', () => {
-    document.getElementById('play-btn').innerText = '▶';
-    playhead.style.display = 'none';
-    stopLiveSynth();
-    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-});
-wavesurfer.on('seek', () => {
-    const time = wavesurfer.getCurrentTime();
-    playhead.style.left = (time * PPS) + 'px';
-});
-
-function formatTime(sec) {
-    const m = Math.floor(sec / 60);
-    const s = Math.floor(sec % 60);
-    return m + ':' + (s < 10 ? '0' : '') + s;
-}
-
-document.getElementById('vol-inst').addEventListener('input', (e) => {
-    const val = e.target.value;
-    document.getElementById('val-inst').innerText = val + '%';
-    wavesurfer.setVolume(val / 100);
-});
 
 async function save() {
     try {
@@ -1263,8 +1169,7 @@ async function save() {
         });
     } catch(e) { console.error(e); }
     tg.sendData(JSON.stringify({
-        job_id: jobId,
-        job_dir: jobDir,
+        job_id: jobId, job_dir: jobDir,
         vol_inst: document.getElementById('vol-inst').value,
         vol_bass: volBassFromUrl,
     }));
