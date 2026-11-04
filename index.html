@@ -3,58 +3,221 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0a0a14">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://unpkg.com/wavesurfer.js@7"></script>
 <style>
-* { box-sizing: border-box; }
-body { margin: 0; background: #141414; color: white; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
-.header { display: flex; justify-content: space-between; padding: 8px 10px; background: #1a1a1a; align-items: center; gap: 8px; font-size: 13px; }
-.time { color: #4a9eff; font-weight: bold; font-size: 13px; }
-.mode-badge { padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; }
-.mode-draft { background: #7ad07a; color: #000; }
-.mode-live { background: #9b59b6; color: #fff; }
+:root {
+    --bg: #0a0a14;
+    --bg-soft: #12121e;
+    --border: rgba(255,255,255,0.07);
+    --border-bright: rgba(255,255,255,0.14);
+    --text: #eef0f8;
+    --text-dim: #8a8aa0;
+    --text-mute: #5a5a72;
+    --primary: #6c5ce7;
+    --primary-bright: #8b7bff;
+    --accent: #00d9ff;
+    --success: #00e896;
+    --warn: #ffb020;
+    --danger: #ff4466;
+    --pink: #ff5cae;
+    --radius: 14px;
+    --radius-sm: 10px;
+}
 
-.moments-panel { display: flex; gap: 6px; padding: 8px; background: #0f0f0f; overflow-x: auto; min-height: 62px; align-items: center; }
+html, body {
+    height: 100vh;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    background: radial-gradient(ellipse 120% 60% at 50% 0%, #1a1a40 0%, #0a0a14 60%);
+}
+
+/* Topbar */
+.topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px;
+    background: linear-gradient(180deg, rgba(20,20,44,0.95), rgba(10,10,20,0.85));
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    position: relative; z-index: 30;
+}
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 15px; letter-spacing: -0.3px; }
+.brand-icon { font-size: 18px; filter: drop-shadow(0 0 8px rgba(108,92,231,0.6)); }
+.brand-text {
+    background: linear-gradient(135deg, #fff 0%, #a78bfa 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.badges { display: flex; align-items: center; gap: 6px; }
+.badge {
+    padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;
+    letter-spacing: 0.2px; border: 1px solid var(--border-bright);
+}
+.badge-draft { background: linear-gradient(135deg, #2a2a4a, #1a1a30); color: #b0b0d0; }
+.badge-live {
+    background: linear-gradient(135deg, var(--pink), var(--primary)); color: #fff;
+    box-shadow: 0 0 12px rgba(255,92,174,0.5); border-color: transparent;
+}
+.badge-time {
+    background: rgba(0,217,255,0.1); color: var(--accent); border-color: rgba(0,217,255,0.3);
+    font-variant-numeric: tabular-nums; font-family: 'SF Mono','Monaco',monospace;
+}
+
+/* Moments */
+.moments-panel {
+    display: flex; gap: 8px; padding: 10px 12px;
+    background: rgba(0,0,0,0.3);
+    overflow-x: auto; min-height: 62px; align-items: center;
+    scrollbar-width: none; border-bottom: 1px solid var(--border);
+}
+.moments-panel::-webkit-scrollbar { display: none; }
+.moments-empty { color: var(--text-mute); font-size: 11px; padding: 0 6px; font-style: italic; }
 .moment-chip-wrap { position: relative; flex-shrink: 0; }
-.moment-chip { min-width: 74px; padding: 8px 10px; background: #9b59b6; border-radius: 8px; font-size: 11px; font-weight: bold; display: flex; flex-direction: column; gap: 2px; user-select: none; touch-action: none; cursor: grab; }
-.moment-chip:active { cursor: grabbing; }
-.moment-chip .sub { font-size: 10px; opacity: 0.75; font-weight: normal; }
-.moment-del { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; background: #ff4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #fff; cursor: pointer; z-index: 2; }
+.moment-chip {
+    min-width: 82px; padding: 10px 12px;
+    background: linear-gradient(135deg, var(--primary), #4a3faf);
+    border-radius: var(--radius-sm); font-size: 11px; font-weight: 700;
+    display: flex; flex-direction: column; gap: 3px;
+    user-select: none; touch-action: none; cursor: grab;
+    box-shadow: 0 2px 8px rgba(108,92,231,0.35), inset 0 1px 0 rgba(255,255,255,0.1);
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+.moment-chip:active { cursor: grabbing; transform: scale(0.97); }
+.moment-chip .sub { font-size: 10px; opacity: 0.75; font-weight: 400; }
+.moment-del {
+    position: absolute; top: -6px; right: -6px; width: 22px; height: 22px;
+    background: linear-gradient(135deg, var(--danger), #cc2244);
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 14px; color: #fff; cursor: pointer; z-index: 2;
+    box-shadow: 0 2px 6px rgba(255,68,102,0.45);
+}
 
-.editor-container { flex-grow: 1; position: relative; overflow-x: auto; overflow-y: hidden; background: #0d0d0d; touch-action: pan-x; }
-#waveform { position: absolute; top: 30px; left: 0; height: 130px; cursor: pointer; }
-#notes-canvas { position: absolute; top: 0; left: 0; z-index: 10; touch-action: none; }
-#playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #ff4444; z-index: 15; display: none; pointer-events: none; box-shadow: 0 0 5px #ff4444; }
+/* Hint */
+.hint {
+    padding: 8px 14px;
+    background: rgba(255,176,32,0.07); color: var(--warn);
+    font-size: 11.5px; text-align: center; min-height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    border-bottom: 1px solid rgba(255,176,32,0.12);
+    font-weight: 500; transition: background 0.2s, color 0.2s;
+    line-height: 1.3;
+}
 
-.controls { background: #1a1a1a; padding: 8px; display: flex; flex-direction: column; gap: 4px; z-index: 20; }
-.slider-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #aaa; }
-.slider-row input { width: 50%; accent-color: #3a8eef; }
-.val { width: 55px; text-align: right; color: #fff; font-weight: bold; }
+/* Editor */
+.editor-container {
+    flex: 1; position: relative;
+    overflow-x: auto; overflow-y: hidden;
+    background: #08080e;
+    touch-action: pan-x;
+    background-image: linear-gradient(180deg, rgba(30,30,70,0.35), transparent 40%);
+}
+.editor-container::-webkit-scrollbar { height: 6px; }
+.editor-container::-webkit-scrollbar-track { background: #0a0a14; }
+.editor-container::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 3px; }
 
-.actions { display: flex; gap: 4px; padding: 6px 8px; background: #141414; z-index: 20; }
-.btn { flex: 1; min-width: 50px; padding: 10px 3px; border: none; border-radius: 8px; font-weight: bold; font-size: 12px; color: white; transition: box-shadow 0.15s; }
-.btn-green { background: #7ad07a; color: black; }
-.btn-gray { background: #333; }
-.btn-blue { background: #3a8eef; }
-.btn-orange { background: #ffaa00; color: black; }
-.btn-purple { background: #9b59b6; }
-.btn-red { background: #ff4444; }
-.btn-cyan { background: #00bcd4; color: black; }
-.btn-active { box-shadow: 0 0 0 2px #fff inset; }
+#waveform { position: absolute; top: 30px; left: 0; height: 130px; pointer-events: none; }
+#notes-canvas { position: absolute; top: 0; left: 0; z-index: 10; touch-action: none; cursor: crosshair; }
+#playhead {
+    position: absolute; top: 0; bottom: 0; width: 2px;
+    background: linear-gradient(180deg, transparent 0%, var(--accent) 15%, var(--accent) 85%, transparent 100%);
+    z-index: 15; display: none; pointer-events: none;
+    box-shadow: 0 0 12px var(--accent), 0 0 4px var(--accent);
+}
 
-.hint { padding: 5px 10px; background: #2a2a2a; color: #ffaa00; font-size: 11px; text-align: center; min-height: 22px; }
+/* Seek indicator */
+.seek-indicator {
+    position: fixed; top: 45%; left: 50%;
+    transform: translate(-50%, -50%) scale(0.85);
+    background: rgba(6,6,16,0.92);
+    color: var(--accent); font-size: 30px; font-weight: 900;
+    padding: 12px 26px; border-radius: 22px;
+    pointer-events: none; opacity: 0;
+    transition: opacity 0.1s, transform 0.1s;
+    z-index: 100;
+    font-variant-numeric: tabular-nums; letter-spacing: 1px;
+    font-family: 'SF Mono','Monaco',monospace;
+    border: 1px solid rgba(0,217,255,0.35);
+    box-shadow: 0 4px 24px rgba(0,217,255,0.25);
+}
+.seek-indicator.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+
+/* Controls */
+.controls {
+    background: linear-gradient(180deg, var(--bg-soft), var(--bg));
+    padding: 10px 12px 12px;
+    display: flex; flex-direction: column; gap: 8px;
+    z-index: 20; border-top: 1px solid var(--border);
+}
+
+.slider-row {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 12px; color: var(--text-dim); font-weight: 600;
+}
+.slider-row > span:first-child { min-width: 42px; text-transform: uppercase; letter-spacing: 0.5px; font-size: 10px; }
+.slider-row input[type=range] {
+    flex: 1; height: 6px; -webkit-appearance: none;
+    background: linear-gradient(90deg, var(--primary), var(--primary-bright));
+    border-radius: 3px; outline: none;
+}
+.slider-row input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 20px; height: 20px;
+    border-radius: 50%; background: #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.5), 0 0 0 4px rgba(108,92,231,0.35);
+    cursor: pointer;
+}
+.val { min-width: 46px; text-align: right; color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.btn {
+    padding: 10px 6px; border: none; border-radius: var(--radius-sm);
+    font-weight: 700; font-size: 11px; color: white;
+    transition: all 0.15s; display: flex; align-items: center;
+    justify-content: center; gap: 4px;
+    font-family: inherit; cursor: pointer;
+    letter-spacing: 0.2px; line-height: 1.15; min-height: 42px;
+    border: 1px solid rgba(255,255,255,0.08);
+    position: relative;
+}
+.btn:active { transform: scale(0.96); }
+.btn-gray    { background: linear-gradient(135deg, #2a2a3e, #1a1a2a); color: #c0c0d8; }
+.btn-green   { background: linear-gradient(135deg, var(--success), #00b878); color: #001a10; box-shadow: 0 2px 8px rgba(0,232,150,0.25); }
+.btn-blue    { background: linear-gradient(135deg, var(--primary), #4a3faf); box-shadow: 0 2px 8px rgba(108,92,231,0.3); }
+.btn-orange  { background: linear-gradient(135deg, var(--warn), #cc8000); color: #1a0f00; box-shadow: 0 2px 8px rgba(255,176,32,0.2); }
+.btn-purple  { background: linear-gradient(135deg, var(--pink), #cc3a88); box-shadow: 0 2px 8px rgba(255,92,174,0.25); }
+.btn-red     { background: linear-gradient(135deg, var(--danger), #cc2244); box-shadow: 0 2px 8px rgba(255,68,102,0.25); }
+.btn-cyan    { background: linear-gradient(135deg, var(--accent), #00a8cc); color: #001a20; box-shadow: 0 2px 8px rgba(0,217,255,0.2); }
+.btn-active  { box-shadow: 0 0 0 2px #fff inset, 0 0 14px currentColor; }
+#play-btn    { font-size: 18px; }
 </style>
 </head>
 <body>
-<div class="header">
-    <span>🎛 Low Bass</span>
-    <span class="mode-badge mode-draft" id="mode-badge">📼 Черновик</span>
-    <span class="time" id="timer">0:00 / 0:00</span>
+
+<div class="topbar">
+    <div class="brand">
+        <span class="brand-icon">🎛</span>
+        <span class="brand-text">Low Bass</span>
+    </div>
+    <div class="badges">
+        <span class="badge badge-draft" id="mode-badge">📼 Draft</span>
+        <span class="badge badge-time" id="timer">0:00 / 0:00</span>
+    </div>
 </div>
 
 <div class="moments-panel" id="moments-panel"></div>
-<div class="hint" id="hint">Тап по волне/пустому месту — перемотка. 🎹 Живой — слышны правки.</div>
+<div class="hint" id="hint">Тап — перемотка · Свайп — скраб · Тап по ноте — выделить и услышать</div>
 
 <div class="editor-container" id="editor-container">
     <div id="waveform"></div>
@@ -62,47 +225,48 @@ body { margin: 0; background: #141414; color: white; font-family: sans-serif; he
     <div id="playhead"></div>
 </div>
 
+<div class="seek-indicator" id="seek-indicator">0:00</div>
+
 <div class="controls">
     <div class="slider-row">
         <span>Инстр</span>
         <input type="range" id="vol-inst" min="0" max="200" value="100">
         <span class="val" id="val-inst">100%</span>
     </div>
-</div>
 
-<div class="actions">
-    <button class="btn btn-gray" onclick="tg.close()">✕</button>
-    <button class="btn btn-blue" onclick="togglePlay()" id="play-btn">▶</button>
-    <button class="btn btn-purple" onclick="toggleMode()" id="mode-btn">🎹 Живой</button>
-    <button class="btn btn-green" onclick="save()">✓ Готово</button>
-</div>
+    <div class="actions">
+        <button class="btn btn-gray" onclick="tg.close()">✕</button>
+        <button class="btn btn-blue" onclick="togglePlay()" id="play-btn">▶</button>
+        <button class="btn btn-purple" onclick="toggleMode()" id="mode-btn">🎹 Live</button>
+        <button class="btn btn-green" onclick="save()">✓ Готово</button>
+    </div>
 
-<div class="actions">
-    <button class="btn btn-gray" onclick="startGapSelection()" id="btn-gap">📍 Промежуток</button>
-    <button class="btn btn-purple" onclick="saveAsMoment()" id="btn-moment">💾 Момент</button>
-    <button class="btn btn-red" onclick="cancelMode()">✕ Отмена</button>
-</div>
+    <div class="actions">
+        <button class="btn btn-gray" onclick="startGapSelection()" id="btn-gap">📍 Gap</button>
+        <button class="btn btn-purple" onclick="saveAsMoment()" id="btn-moment">💾 Момент</button>
+        <button class="btn btn-red" onclick="cancelMode()">✕ Отмена</button>
+        <button class="btn btn-orange" onclick="moveEdge(-1)">← 0.01</button>
+    </div>
 
-<div class="actions">
-    <button class="btn btn-orange" onclick="moveEdge(-1)">←</button>
-    <button class="btn btn-orange" onclick="moveEdge(1)">→</button>
-    <button class="btn btn-orange" onclick="autoFillSelectedGap()" id="btn-auto">⚡ Авто</button>
-    <button class="btn btn-red" onclick="deleteSelectedGap()" id="btn-del-gap">🗑</button>
-</div>
+    <div class="actions">
+        <button class="btn btn-orange" onclick="moveEdge(1)">→ 0.01</button>
+        <button class="btn btn-orange" onclick="autoFillSelectedGap()" id="btn-auto">⚡ Авто</button>
+        <button class="btn btn-red" onclick="deleteSelectedGap()" id="btn-del-gap">🗑</button>
+        <button class="btn btn-cyan" onclick="autoDetectAndFillEmpty()" id="btn-find-empty">🔍 Пустоты</button>
+    </div>
 
-<div class="actions">
-    <button class="btn btn-cyan" onclick="autoDetectAndFillEmpty()" id="btn-find-empty">🔍 Пустоты</button>
-    <button class="btn btn-cyan" onclick="splitLongNotesByKicks()" id="btn-cut-long">✂️ Длинные</button>
-</div>
-
-<div class="actions">
-    <button class="btn btn-gray" onclick="splitNote()">✂</button>
-    <button class="btn btn-gray" onclick="joinNotes()">🔗</button>
+    <div class="actions">
+        <button class="btn btn-cyan" onclick="splitLongNotesByKicks()" id="btn-cut-long">✂️ Длинные</button>
+        <button class="btn btn-gray" onclick="splitNote()">✂ Разрез</button>
+        <button class="btn btn-gray" onclick="joinNotes()">🔗 Соед</button>
+    </div>
 </div>
 
 <script>
 const tg = window.Telegram.WebApp;
 tg.expand();
+tg.setHeaderColor('#0a0a14');
+tg.setBackgroundColor('#0a0a14');
 
 const SUPABASE_URL = "https://nizngtkkmqqyhuyqhold.supabase.co";
 const SUPABASE_KEY = "sb_publishable_ryrnxleq02WsQ7fcqPL3uw_dJqTXdos";
@@ -119,60 +283,38 @@ const bpm = parseFloat(urlParams.get('bpm') || "0");
 const screwedFactor = parseFloat(urlParams.get('screwed') || "1.0");
 const volBassFromUrl = parseFloat(urlParams.get('vol_bass') || "9.0");
 
-console.log(`[init] bpm=${bpm}, screwed=${screwedFactor}, vol_bass=${volBassFromUrl}`);
-
-// === РЕАЛЬНЫЕ КИКИ ИЗ URL ===
 let kicks = [];
 const kicksStr = urlParams.get('kicks');
-if (kicksStr) {
-    kicks = kicksStr.split(',').map(s => parseFloat(s)).filter(k => !isNaN(k) && k >= 0);
-}
-console.log(`[init] kicks из URL: ${kicks.length}`);
+if (kicksStr) kicks = kicksStr.split(',').map(s => parseFloat(s)).filter(k => !isNaN(k) && k >= 0);
 
 function getKicks() {
     if (kicks.length > 0) return kicks;
-    // Fallback: генерим сетку по bpm
     if (!bpm || bpm <= 0) return [];
     const beat = 60 / bpm;
     const arr = [];
     for (let t = 0; t < duration; t += beat) arr.push(t);
-    console.log(`[kicks] fallback: ${arr.length} из bpm=${bpm.toFixed(0)}`);
     return arr;
 }
 
-let notes = [];
-let gaps = [];
-let moments = [];
-let selectedNotes = [];
-let selectedGap = null;
-let selectedEdge = null;
-
-let gapMode = false;
-let pendingGapStart = null;
-let momentMode = false;
-let pendingMomentBox = { x1: null, x2: null };
-let draggedMoment = null;
-let dropTargetGapId = null;
-
+let notes = [], gaps = [], moments = [];
+let selectedNotes = [], selectedGap = null, selectedEdge = null;
+let gapMode = false, pendingGapStart = null;
+let momentMode = false, pendingMomentBox = { x1: null, x2: null };
+let draggedMoment = null, dropTargetGapId = null;
 let currentMode = 'draft';
 
 let audioCtx = null;
 let liveSynthNodes = [];
-let liveBassGain = null;
-let liveComp = null;
-let liveHP = null;
+let liveBassGain = null, liveComp = null, liveHP = null;
 
 function initAudio() {
-    if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
 }
 
 function playTapSound(freq) {
     initAudio();
     if (!audioCtx) return;
-    if (audioCtx.state === 'suspended') audioCtx.resume();
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.type = 'sine';
@@ -188,6 +330,7 @@ function playTapSound(freq) {
     osc.stop(t + 0.15);
 }
 
+// Load notes from Supabase
 if (jobId) {
     fetch(`${SUPABASE_URL}/rest/v1/temp_notes?id=eq.${jobId}&select=notes`, {
         headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
@@ -210,18 +353,24 @@ const NOTE_BOTTOM = 20;
 const NOTE_H = 14;
 
 const canvas = document.getElementById('notes-canvas');
-const ctx = canvas.getContext('2d');
+const ctx = canvas.getContext('2d', { alpha: true });
 const container = document.getElementById('editor-container');
 const playhead = document.getElementById('playhead');
 const waveformEl = document.getElementById('waveform');
+const seekIndicator = document.getElementById('seek-indicator');
+
+let CANVAS_W = 0, CANVAS_H = 0;
 
 function resizeCanvas() {
     const w = duration * PPS + 20;
     const h = Math.max(container.clientHeight, 300);
-    canvas.width = w;
-    canvas.height = h;
-    canvas.style.width = w + 'px';
+    CANVAS_W = w; CANVAS_H = h;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width  = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    canvas.style.width  = w + 'px';
     canvas.style.height = h + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     waveformEl.style.width = w + 'px';
 }
 resizeCanvas();
@@ -229,48 +378,36 @@ window.addEventListener('resize', () => { resizeCanvas(); draw(); });
 
 const wavesurfer = WaveSurfer.create({
     container: '#waveform',
-    waveColor: '#3a8eef',
-    progressColor: '#ffffff33',
+    waveColor: '#2a2a55',
+    progressColor: '#00d9ff',
     height: WAVE_H,
     barWidth: 2,
     barGap: 1,
+    barRadius: 2,
     minPxPerSec: PPS,
     fillParent: false,
     interact: false,
+    normalize: true,
 });
 
 if (audioUrl) wavesurfer.load(audioUrl);
 else if (instUrl) wavesurfer.load(instUrl);
-
 wavesurfer.on('ready', () => { resizeCanvas(); draw(); });
 
-waveformEl.addEventListener('pointerdown', (e) => {
-    if (gapMode) return;
-    const rect = waveformEl.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const time = Math.max(0, Math.min(duration, x / PPS));
-    seekTo(time);
-});
-
-// ============ LIVE SYNTH — идентично processor.py ============
+// ============ LIVE SYNTH ============
 function ensureLiveChain() {
     if (liveBassGain) return;
     liveBassGain = audioCtx.createGain();
-    // Запас от клиппинга: peak сэмпла ~1.0 × 0.35 = 0.35 → +9dB gain = 0.99 peak
     liveBassGain.gain.value = Math.pow(10, volBassFromUrl / 20) * 0.35;
-
     liveHP = audioCtx.createBiquadFilter();
     liveHP.type = 'highpass';
     liveHP.frequency.value = 20;
-
-    // Лимитер — защита от клиппинга
     liveComp = audioCtx.createDynamicsCompressor();
     liveComp.threshold.value = -1;
     liveComp.knee.value = 0;
     liveComp.ratio.value = 20;
     liveComp.attack.value = 0.001;
     liveComp.release.value = 0.05;
-
     liveBassGain.connect(liveHP);
     liveHP.connect(liveComp);
     liveComp.connect(audioCtx.destination);
@@ -278,18 +415,12 @@ function ensureLiveChain() {
 
 function startLiveSynth(fromTime) {
     if (currentMode !== 'live') return;
-    initAudio();
-    if (!audioCtx) return;
+    initAudio(); if (!audioCtx) return;
     audioCtx.resume();
     stopLiveSynth();
     ensureLiveChain();
-
-    const t0 = audioCtx.currentTime + 0.05;
-
-    // Только fade 8мс по краям — форма сэмпла не меняется
+    const t0 = audioCtx.currentTime + 0.04;
     const FADE = 0.008;
-
-    let count = 0;
     for (const note of notes) {
         if (note.start + note.dur < fromTime) continue;
         const actualStart = Math.max(note.start, fromTime);
@@ -297,14 +428,10 @@ function startLiveSynth(fromTime) {
         const dur = note.dur - offset;
         if (dur < 0.03) continue;
         const when = t0 + (actualStart - fromTime);
-
         const osc = audioCtx.createOscillator();
         const env = audioCtx.createGain();
         osc.type = 'sine';
-
-        const effFreq = screwedFactor < 0.999 ? note.freq * screwedFactor : note.freq;
-        osc.frequency.value = effFreq;
-
+        osc.frequency.value = screwedFactor < 0.999 ? note.freq * screwedFactor : note.freq;
         const fade = Math.min(FADE, dur * 0.4);
         env.gain.setValueAtTime(0, when);
         env.gain.linearRampToValueAtTime(1.0, when + fade);
@@ -314,37 +441,27 @@ function startLiveSynth(fromTime) {
         } else {
             env.gain.linearRampToValueAtTime(0, when + dur);
         }
-
-        osc.connect(env);
-        env.connect(liveBassGain);
-        osc.start(when);
-        osc.stop(when + dur + 0.02);
+        osc.connect(env); env.connect(liveBassGain);
+        osc.start(when); osc.stop(when + dur + 0.02);
         liveSynthNodes.push(osc);
-        count++;
     }
-    console.log(`[live] синтез ${count} нот с ${fromTime.toFixed(2)}s`);
 }
 
 function stopLiveSynth() {
     liveSynthNodes.forEach(n => { try { n.stop(); } catch(e){} });
     liveSynthNodes = [];
 }
-
 function resynthIfLive() {
     if (currentMode === 'live' && wavesurfer.isPlaying()) {
         stopLiveSynth();
         startLiveSynth(wavesurfer.getCurrentTime());
     }
 }
-
-function afterEdit() {
-    resynthIfLive();
-    draw();
-}
+function afterEdit() { resynthIfLive(); draw(); }
 
 async function switchToLive() {
     if (currentMode === 'live') return;
-    if (!instUrl) { setHint('Нет inst.mp3'); return; }
+    if (!instUrl) return setHint('Нет inst.mp3');
     const wasPlaying = wavesurfer.isPlaying();
     const curTime = wavesurfer.getCurrentTime();
     stopLiveSynth();
@@ -354,20 +471,14 @@ async function switchToLive() {
         await wavesurfer.load(instUrl);
         wavesurfer.setVolume(parseFloat(document.getElementById('vol-inst').value) / 100);
         wavesurfer.seekTo(curTime / Math.max(duration, 0.001));
-        if (wasPlaying) {
-            await wavesurfer.play();
-            startLiveSynth(curTime);
-        }
-        setHint('🎹 Живой режим: правки слышны сразу');
-    } catch(e) {
-        console.error(e);
-        setHint('Ошибка загрузки inst');
-    }
+        if (wasPlaying) { await wavesurfer.play(); startLiveSynth(curTime); }
+        setHint('🎹 Live: правки слышны сразу');
+    } catch(e) { console.error(e); setHint('Ошибка загрузки inst'); }
 }
 
 async function switchToDraft() {
     if (currentMode === 'draft') return;
-    if (!audioUrl) { setHint('Нет result.mp3'); return; }
+    if (!audioUrl) return setHint('Нет result.mp3');
     const wasPlaying = wavesurfer.isPlaying();
     const curTime = wavesurfer.getCurrentTime();
     stopLiveSynth();
@@ -378,51 +489,60 @@ async function switchToDraft() {
         wavesurfer.setVolume(parseFloat(document.getElementById('vol-inst').value) / 100);
         wavesurfer.seekTo(curTime / Math.max(duration, 0.001));
         if (wasPlaying) await wavesurfer.play();
-        setHint('📼 Черновик: звук 1:1 как result.mp3');
-    } catch(e) {
-        console.error(e);
-        setHint('Ошибка загрузки result');
-    }
+        setHint('📼 Draft: 1:1 как result.mp3');
+    } catch(e) { console.error(e); setHint('Ошибка загрузки result'); }
 }
 
 function toggleMode() {
-    if (currentMode === 'draft') switchToLive();
-    else switchToDraft();
+    currentMode === 'draft' ? switchToLive() : switchToDraft();
 }
 
 function updateModeBadge() {
     const badge = document.getElementById('mode-badge');
     const btn = document.getElementById('mode-btn');
     if (currentMode === 'live') {
-        badge.innerText = '🎹 Живой';
-        badge.className = 'mode-badge mode-live';
-        btn.innerText = '📼 Черновик';
+        badge.innerText = '🎹 Live';
+        badge.className = 'badge badge-live';
+        btn.innerText = '📼 Draft';
     } else {
-        badge.innerText = '📼 Черновик';
-        badge.className = 'mode-badge mode-draft';
-        btn.innerText = '🎹 Живой';
+        badge.innerText = '📼 Draft';
+        badge.className = 'badge badge-draft';
+        btn.innerText = '🎹 Live';
     }
 }
 
-function seekTo(time) {
+// ============ SEEK ============
+function doSeek(time, scroll = false) {
     time = Math.max(0, Math.min(duration, time));
-    const ratio = time / Math.max(duration, 0.001);
-    wavesurfer.seekTo(ratio);
+    wavesurfer.seekTo(time / Math.max(duration, 0.001));
     playhead.style.left = (time * PPS) + 'px';
     playhead.style.display = 'block';
     if (currentMode === 'live' && wavesurfer.isPlaying()) {
         stopLiveSynth();
         startLiveSynth(time);
     }
-    const w = container.clientWidth;
-    const x = time * PPS;
-    if (x > w / 2) container.scrollLeft = x - w / 2;
+    if (scroll) {
+        const w = container.clientWidth;
+        const x = time * PPS;
+        if (x > w * 0.75 || x < w * 0.25) {
+            container.scrollLeft = Math.max(0, x - w * 0.4);
+        }
+    }
 }
 
+function showSeekIndicator(time) {
+    seekIndicator.textContent = formatTime(time);
+    seekIndicator.classList.add('show');
+}
+function hideSeekIndicator() {
+    seekIndicator.classList.remove('show');
+}
+
+// ============ DRAW ============
 function freqToY(freq) {
-    const noteAreaH = canvas.height - NOTE_TOP - NOTE_BOTTOM;
+    const areaH = CANVAS_H - NOTE_TOP - NOTE_BOTTOM;
     const norm = Math.max(0, Math.min(1, (freq - 20) / 180));
-    return NOTE_TOP + (1 - norm) * (noteAreaH - NOTE_H);
+    return NOTE_TOP + (1 - norm) * (areaH - NOTE_H);
 }
 
 function drawBeatGrid() {
@@ -432,11 +552,12 @@ function drawBeatGrid() {
     while (t <= duration + 0.001) {
         const x = t * PPS;
         const isBar = (idx % 4 === 0);
-        ctx.strokeStyle = isBar ? '#2a2a5a' : '#181825';
-        ctx.lineWidth = isBar ? 1.5 : 1;
+        const isPhrase = (idx % 16 === 0);
+        ctx.strokeStyle = isPhrase ? '#3a3a7a' : (isBar ? '#28285a' : '#151525');
+        ctx.lineWidth = isPhrase ? 2 : (isBar ? 1.2 : 0.8);
         ctx.beginPath();
         ctx.moveTo(x, NOTE_TOP - 5);
-        ctx.lineTo(x, canvas.height - NOTE_BOTTOM);
+        ctx.lineTo(x, CANVAS_H - NOTE_BOTTOM);
         ctx.stroke();
         t += beatDur;
         idx++;
@@ -449,13 +570,13 @@ function drawKicks() {
     ks.forEach(k => {
         if (k > duration) return;
         const x = k * PPS;
-        ctx.strokeStyle = 'rgba(255, 100, 100, 0.3)';
+        ctx.strokeStyle = 'rgba(255,100,120,0.25)';
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(x, NOTE_TOP);
-        ctx.lineTo(x, canvas.height - NOTE_BOTTOM);
+        ctx.lineTo(x, CANVAS_H - NOTE_BOTTOM);
         ctx.stroke();
-        ctx.fillStyle = 'rgba(255, 100, 100, 0.6)';
+        ctx.fillStyle = 'rgba(255,100,120,0.55)';
         ctx.beginPath();
         ctx.moveTo(x - 3, NOTE_TOP - 2);
         ctx.lineTo(x + 3, NOTE_TOP - 2);
@@ -472,19 +593,19 @@ function drawGaps() {
         const isSel = (selectedGap && selectedGap.id === gap.id);
         const isTarget = (dropTargetGapId === gap.id);
 
-        if (isTarget) ctx.fillStyle = 'rgba(122, 208, 122, 0.10)';
-        else if (isSel) ctx.fillStyle = 'rgba(155, 89, 182, 0.10)';
-        else ctx.fillStyle = 'rgba(155, 89, 182, 0.04)';
-        ctx.fillRect(x1, NOTE_TOP, x2 - x1, canvas.height - NOTE_TOP - NOTE_BOTTOM);
+        if (isTarget) ctx.fillStyle = 'rgba(0,232,150,0.12)';
+        else if (isSel) ctx.fillStyle = 'rgba(255,92,174,0.12)';
+        else ctx.fillStyle = 'rgba(108,92,231,0.06)';
+        ctx.fillRect(x1, NOTE_TOP, x2 - x1, CANVAS_H - NOTE_TOP - NOTE_BOTTOM);
 
-        const lineColor = isTarget ? '#7ad07a' : (isSel ? '#c060ff' : '#9b59b6');
+        const lineColor = isTarget ? '#00e896' : (isSel ? '#ff5cae' : '#6c5ce7');
         ctx.strokeStyle = lineColor;
         ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.moveTo(x1 + 1.5, NOTE_TOP);
-        ctx.lineTo(x1 + 1.5, canvas.height - NOTE_BOTTOM);
+        ctx.lineTo(x1 + 1.5, CANVAS_H - NOTE_BOTTOM);
         ctx.moveTo(x2 - 1.5, NOTE_TOP);
-        ctx.lineTo(x2 - 1.5, canvas.height - NOTE_BOTTOM);
+        ctx.lineTo(x2 - 1.5, CANVAS_H - NOTE_BOTTOM);
         ctx.stroke();
 
         ctx.strokeStyle = lineColor;
@@ -497,9 +618,9 @@ function drawGaps() {
         ctx.setLineDash([]);
 
         ctx.fillStyle = lineColor;
-        ctx.font = 'bold 11px Arial';
+        ctx.font = 'bold 11px system-ui';
         ctx.fillText(gap.name, x1 + 6, NOTE_TOP + 14);
-        ctx.font = '10px Arial';
+        ctx.font = '10px system-ui';
         ctx.fillStyle = '#aaa';
         ctx.fillText((gap.end - gap.start).toFixed(2) + 's', x1 + 6, NOTE_TOP + 28);
     });
@@ -508,37 +629,37 @@ function drawGaps() {
 function drawPendingGap() {
     if (!gapMode || pendingGapStart === null) return;
     const x = pendingGapStart * PPS;
-    ctx.strokeStyle = '#ffaa00';
+    ctx.strokeStyle = '#ffb020';
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(x, NOTE_TOP);
-    ctx.lineTo(x, canvas.height - NOTE_BOTTOM);
+    ctx.lineTo(x, CANVAS_H - NOTE_BOTTOM);
     ctx.stroke();
-    ctx.strokeStyle = 'rgba(255, 170, 0, 0.4)';
+    ctx.strokeStyle = 'rgba(255,176,32,0.4)';
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
     ctx.moveTo(x, NOTE_TOP + 1);
-    ctx.lineTo(canvas.width, NOTE_TOP + 1);
+    ctx.lineTo(CANVAS_W, NOTE_TOP + 1);
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = '#ffaa00';
-    ctx.font = 'bold 11px Arial';
+    ctx.fillStyle = '#ffb020';
+    ctx.font = 'bold 11px system-ui';
     ctx.fillText('начало ' + pendingGapStart.toFixed(2) + 's', x + 6, NOTE_TOP + 14);
-    ctx.font = '10px Arial';
+    ctx.font = '10px system-ui';
     ctx.fillStyle = '#ffcc66';
     ctx.fillText('тап в конец', x + 6, NOTE_TOP + 28);
 }
 
 function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
     drawBeatGrid();
     drawKicks();
     drawGaps();
     drawPendingGap();
 
-    ctx.fillStyle = '#666';
-    ctx.font = '11px Arial';
+    ctx.fillStyle = '#555';
+    ctx.font = '11px system-ui';
     for (let i = 0; i <= duration; i += 5) {
         ctx.fillText(i + 's', i * PPS + 3, 15);
     }
@@ -550,39 +671,62 @@ function draw() {
         const isSel = selectedNotes.includes(note);
         const isAccent = accentHz > 0 && Math.abs(note.freq - accentHz) < 0.5;
         const isMain = mainHz > 0 && Math.abs(note.freq - mainHz) < 0.5;
-        let fill, outline;
-        if (isSel) { fill = '#3a8eef'; outline = '#fff'; }
-        else if (isAccent) { fill = '#ffaa00'; outline = '#803300'; }
-        else if (isMain) { fill = '#7ad07a'; outline = '#2a5a2a'; }
-        else { fill = '#5a9a8a'; outline = '#2a3a3a'; }
-        ctx.fillStyle = fill;
-        ctx.fillRect(x, y, w, NOTE_H);
+
+        let fillTop, fillBot, outline;
+        if (isSel) {
+            fillTop = '#8b7bff'; fillBot = '#5a4dcf';
+            outline = '#fff';
+        } else if (isAccent) {
+            fillTop = '#ffb020'; fillBot = '#cc7a00';
+            outline = '#803300';
+        } else if (isMain) {
+            fillTop = '#00e896'; fillBot = '#00a868';
+            outline = '#005530';
+        } else {
+            fillTop = '#7aa8c8'; fillBot = '#4a7898';
+            outline = '#2a3a4a';
+        }
+
+        const grad = ctx.createLinearGradient(0, y, 0, y + NOTE_H);
+        grad.addColorStop(0, fillTop);
+        grad.addColorStop(1, fillBot);
+        ctx.fillStyle = grad;
         ctx.strokeStyle = outline;
-        ctx.lineWidth = 1;
-        ctx.strokeRect(x + 0.5, y + 0.5, w - 1, NOTE_H - 1);
+        ctx.lineWidth = isSel ? 1.5 : 1;
+
+        if (ctx.roundRect) {
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, NOTE_H, 3);
+            ctx.fill();
+            if (isSel) ctx.stroke();
+        } else {
+            ctx.fillRect(x, y, w, NOTE_H);
+            ctx.strokeRect(x + 0.5, y + 0.5, w - 1, NOTE_H - 1);
+        }
+
         if (w > 34) {
             ctx.fillStyle = 'rgba(0,0,0,0.85)';
-            ctx.font = 'bold 10px Arial';
-            ctx.fillText(note.freq.toFixed(0) + 'Hz', x + 3, y + 11);
+            ctx.font = 'bold 10px system-ui';
+            ctx.fillText(note.freq.toFixed(0) + 'Hz', x + 4, y + 11);
         }
     });
 
     if (momentMode && pendingMomentBox.x1 !== null && pendingMomentBox.x2 !== null) {
         const x1 = Math.min(pendingMomentBox.x1, pendingMomentBox.x2) * PPS;
         const x2 = Math.max(pendingMomentBox.x1, pendingMomentBox.x2) * PPS;
-        ctx.strokeStyle = '#c060ff';
+        ctx.strokeStyle = '#ff5cae';
         ctx.setLineDash([4, 4]);
         ctx.lineWidth = 2;
-        ctx.strokeRect(x1, NOTE_TOP, x2 - x1, canvas.height - NOTE_TOP - NOTE_BOTTOM);
+        ctx.strokeRect(x1, NOTE_TOP, x2 - x1, CANVAS_H - NOTE_TOP - NOTE_BOTTOM);
         ctx.setLineDash([]);
     }
     if (momentMode && pendingMomentBox.x1 !== null && pendingMomentBox.x2 === null) {
         const x = pendingMomentBox.x1 * PPS;
-        ctx.strokeStyle = '#c060ff';
+        ctx.strokeStyle = '#ff5cae';
         ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.moveTo(x, NOTE_TOP);
-        ctx.lineTo(x, canvas.height - NOTE_BOTTOM);
+        ctx.lineTo(x, CANVAS_H - NOTE_BOTTOM);
         ctx.stroke();
     }
 }
@@ -607,19 +751,81 @@ function hitTestGapEdge(x) {
     return null;
 }
 
-let lastTapTime = 0;
-let lastTapGapId = null;
-let lastTapEdge = null;
+// ============ INTERACTION (scrub / tap) ============
+let pState = null;
 
 canvas.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    handleTap(x, y);
+
+    const inMode = gapMode || momentMode;
+    const hitNote = !inMode ? hitTestNote(x, y) : null;
+    const hitEdge = !inMode ? hitTestGapEdge(x) : null;
+    const isScrubbing = !inMode && !hitNote && !hitEdge;
+
+    pState = {
+        startX: x, startY: y, lastX: x, lastY: y,
+        time: x / PPS, moved: false, hitNote, hitEdge, inMode, isScrubbing,
+        pointerId: e.pointerId,
+    };
+
+    try { canvas.setPointerCapture(e.pointerId); } catch(_) {}
+
+    if (isScrubbing) {
+        doSeek(pState.time, false);
+        showSeekIndicator(pState.time);
+    }
 });
 
-function handleTap(x, y) {
+canvas.addEventListener('pointermove', (e) => {
+    if (!pState || e.pointerId !== pState.pointerId) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    pState.lastX = x; pState.lastY = y;
+
+    const dx = x - pState.startX, dy = y - pState.startY;
+    if (!pState.moved && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
+        pState.moved = true;
+        if (!pState.inMode) {
+            pState.isScrubbing = true;
+            canvas.style.cursor = 'grabbing';
+        }
+    }
+    if (pState.isScrubbing && pState.moved) {
+        const t = Math.max(0, Math.min(duration, x / PPS));
+        doSeek(t, false);
+        showSeekIndicator(t);
+    }
+});
+
+canvas.addEventListener('pointerup', (e) => {
+    if (!pState || e.pointerId !== pState.pointerId) return;
+    const wasMoved = pState.moved;
+    const state = pState;
+    pState = null;
+    canvas.style.cursor = '';
+    hideSeekIndicator();
+
+    if (wasMoved) {
+        const w = container.clientWidth;
+        const x = state.lastX;
+        if (x > w * 0.75 || x < w * 0.25) container.scrollLeft = Math.max(0, x - w * 0.4);
+        return;
+    }
+    handleTap(state.startX, state.startY, state);
+});
+
+canvas.addEventListener('pointercancel', (e) => {
+    if (!pState || e.pointerId !== pState.pointerId) return;
+    pState = null;
+    canvas.style.cursor = '';
+    hideSeekIndicator();
+});
+
+function handleTap(x, y, state) {
     const time = x / PPS;
 
     if (gapMode) {
@@ -631,76 +837,49 @@ function handleTap(x, y) {
             const end = Math.max(pendingGapStart, time);
             if (end - start < 0.1) {
                 setHint('Слишком маленький');
-                pendingGapStart = null;
-                draw();
-                return;
+                pendingGapStart = null; draw(); return;
             }
             createGap(start, end);
-            pendingGapStart = null;
-            gapMode = false;
+            pendingGapStart = null; gapMode = false;
             document.getElementById('btn-gap').classList.remove('btn-active');
             setHint(`Создан: ${gaps[gaps.length - 1].name}`);
         }
-        draw();
-        return;
+        draw(); return;
     }
 
     if (momentMode) {
         if (pendingMomentBox.x1 === null) {
             pendingMomentBox.x1 = time;
             setHint(`Начало: ${time.toFixed(2)}s. Тапните в конец.`);
-            draw();
-            return;
+            draw(); return;
         }
         pendingMomentBox.x2 = time;
         const x1 = Math.min(pendingMomentBox.x1, pendingMomentBox.x2);
         const x2 = Math.max(pendingMomentBox.x1, pendingMomentBox.x2);
-        selectedNotes = notes.filter(n =>
-            n.start >= x1 - 0.01 && n.start + n.dur <= x2 + 0.01
-        );
+        selectedNotes = notes.filter(n => n.start >= x1 - 0.01 && n.start + n.dur <= x2 + 0.01);
         pendingMomentBox = { x1: null, x2: null };
         momentMode = false;
         document.getElementById('btn-moment').classList.remove('btn-active');
         setHint(selectedNotes.length === 0 ? 'Нет нот в диапазоне'
             : `Выделено ${selectedNotes.length} нот`);
-        draw();
-        return;
+        draw(); return;
     }
 
-    const edgeHit = hitTestGapEdge(x);
-    if (edgeHit) {
-        const now = Date.now();
-        const isDouble = (now - lastTapTime < 400)
-            && lastTapGapId === edgeHit.gap.id
-            && lastTapEdge === edgeHit.edge;
-        if (isDouble) {
-            deleteGap(edgeHit.gap.id);
-            lastTapTime = 0; lastTapGapId = null; lastTapEdge = null;
-            draw();
-            return;
-        }
-        selectedGap = edgeHit.gap;
-        selectedEdge = edgeHit.edge;
-        lastTapTime = now;
-        lastTapGapId = edgeHit.gap.id;
-        lastTapEdge = edgeHit.edge;
-        setHint(`${edgeHit.gap.name}: ${edgeHit.edge === 'start' ? 'начало' : 'конец'}`);
-        draw();
-        return;
+    if (state.hitEdge) {
+        const { gap, edge } = state.hitEdge;
+        selectedGap = gap; selectedEdge = edge;
+        setHint(`${gap.name}: ${edge === 'start' ? 'начало' : 'конец'}`);
+        draw(); return;
     }
 
-    const clickedNote = hitTestNote(x, y);
-    if (clickedNote) {
-        selectedNotes = [clickedNote];
-        playTapSound(clickedNote.freq);
+    if (state.hitNote) {
+        selectedNotes = [state.hitNote];
         selectedGap = null;
-        draw();
-    } else {
-        seekTo(time);
-        selectedNotes = [];
-        selectedGap = null;
-        draw();
+        playTapSound(state.hitNote.freq);
+        doSeek(state.hitNote.start, false);
+        draw(); return;
     }
+    // Empty tap: already handled in pointerdown
 }
 
 function setHint(text) {
@@ -708,8 +887,7 @@ function setHint(text) {
 }
 
 function startGapSelection() {
-    gapMode = true;
-    pendingGapStart = null;
+    gapMode = true; pendingGapStart = null;
     document.getElementById('btn-gap').classList.add('btn-active');
     setHint('Тапни НАЧАЛО промежутка');
     draw();
@@ -731,7 +909,7 @@ function deleteGap(gapId) {
 }
 
 function deleteSelectedGap() {
-    if (!selectedGap) { setHint('Тапни на границу промежутка'); return; }
+    if (!selectedGap) return setHint('Тапни на границу промежутка');
     const name = selectedGap.name;
     deleteGap(selectedGap.id);
     setHint(`Удалён: ${name}`);
@@ -739,7 +917,7 @@ function deleteSelectedGap() {
 }
 
 function moveEdge(dir) {
-    if (!selectedGap || !selectedEdge) { setHint('Тапни на конкретную границу'); return; }
+    if (!selectedGap || !selectedEdge) return setHint('Тапни на конкретную границу');
     const step = 0.01 * dir;
     if (selectedEdge === 'start') {
         selectedGap.start = Math.max(0, Math.min(selectedGap.start + step, selectedGap.end - 0.05));
@@ -750,18 +928,16 @@ function moveEdge(dir) {
 }
 
 function autoFillSelectedGap() {
-    if (!selectedGap) { setHint('Тапни на границу промежутка'); return; }
+    if (!selectedGap) return setHint('Тапни на границу промежутка');
     const gap = selectedGap;
     notes = notes.filter(n => !(n.start >= gap.start - 0.01 && n.start < gap.end + 0.01));
 
     let gapKicks = getKicks().filter(k => k >= gap.start && k <= gap.end);
     let usedBpmFallback = false;
-
     if (gapKicks.length === 0 && bpm > 0) {
         const beat = 60 / bpm;
         for (let t = gap.start; t < gap.end - 0.01; t += beat) gapKicks.push(t);
         usedBpmFallback = true;
-        console.log(`[fill_gap] fallback на bpm-сетку: ${gapKicks.length}`);
     }
 
     const ACCENT_HZ = accentHz > 0 ? accentHz : mainHz;
@@ -774,74 +950,50 @@ function autoFillSelectedGap() {
             notes.sort((a, b) => a.start - b.start);
             setHint(`Киков нет — длинная нота ${dur.toFixed(2)}s`);
             afterEdit();
-        } else {
-            setHint('Промежуток слишком короткий');
-        }
+        } else setHint('Промежуток слишком короткий');
         return;
     }
 
-    const ACCENT_DUR = 0.12;
-    const MIN_GAP = 0.05;
-
+    const ACCENT_DUR = 0.12, MIN_GAP = 0.05;
     for (let i = 0; i < gapKicks.length; i++) {
         const k = gapKicks[i];
         const nextK = (i + 1 < gapKicks.length) ? gapKicks[i + 1] : gap.end;
         const interval = nextK - k;
         const accentDur = Math.min(ACCENT_DUR, interval - MIN_GAP);
-        if (accentDur >= 0.05) {
-            notes.push({ start: k, dur: accentDur, freq: ACCENT_HZ });
-        }
+        if (accentDur >= 0.05) notes.push({ start: k, dur: accentDur, freq: ACCENT_HZ });
         const mainStart = k + accentDur + MIN_GAP;
         const mainEnd = nextK - MIN_GAP;
-        const mainDur = mainEnd - mainStart;
-        if (mainDur >= 0.05) {
-            notes.push({ start: mainStart, dur: mainDur, freq: MAIN_HZ });
-        }
+        if (mainEnd - mainStart >= 0.05) notes.push({ start: mainStart, dur: mainEnd - mainStart, freq: MAIN_HZ });
     }
     notes.sort((a, b) => a.start - b.start);
-    const src = usedBpmFallback ? `по bpm (${bpm.toFixed(0)})` : 'по кикам';
-    setHint(`Заполнено ${gapKicks.length} ${src}`);
+    setHint(`Заполнено ${gapKicks.length} ${usedBpmFallback ? 'по bpm' : 'по кикам'}`);
     afterEdit();
 }
 
 function autoDetectAndFillEmpty() {
     const allKicks = getKicks();
-    if (allKicks.length < 4 || notes.length === 0) { setHint('Мало данных'); return; }
-
+    if (allKicks.length < 4 || notes.length === 0) return setHint('Мало данных');
     const COVER_TOL = 0.02;
-    const covered = allKicks.map(k =>
-        notes.some(n => n.start <= k - COVER_TOL && k <= n.start + n.dur - COVER_TOL)
-    );
-
-    const runs = [];
-    let runStart = -1;
+    const covered = allKicks.map(k => notes.some(n => n.start <= k - COVER_TOL && k <= n.start + n.dur - COVER_TOL));
+    const runs = []; let runStart = -1;
     for (let i = 0; i <= allKicks.length; i++) {
         const uncovered = i < allKicks.length && !covered[i];
-        if (uncovered) {
-            if (runStart === -1) runStart = i;
-        } else {
-            if (runStart !== -1) {
-                const count = i - runStart;
-                if (count >= 2) runs.push({ startIdx: runStart, endIdx: i - 1, count });
-                runStart = -1;
-            }
+        if (uncovered) { if (runStart === -1) runStart = i; }
+        else if (runStart !== -1) {
+            const count = i - runStart;
+            if (count >= 2) runs.push({ startIdx: runStart, endIdx: i - 1, count });
+            runStart = -1;
         }
     }
-
-    if (runs.length === 0) { setHint('Пустот не найдено'); return; }
-
+    if (runs.length === 0) return setHint('Пустот не найдено');
     const MATCH_TOL = 0.08;
     let filled = 0, skipped = 0;
-
     for (const run of runs) {
         const runKicks = allKicks.slice(run.startIdx, run.endIdx + 1);
         const emptyStart = runKicks[0];
         const emptyEnd = (run.endIdx + 1 < allKicks.length) ? allKicks[run.endIdx + 1] : duration;
         const emptyIntervals = [];
-        for (let i = 1; i < runKicks.length; i++) {
-            emptyIntervals.push(runKicks[i] - runKicks[i - 1]);
-        }
-
+        for (let i = 1; i < runKicks.length; i++) emptyIntervals.push(runKicks[i] - runKicks[i - 1]);
         let bestDonor = null, bestScore = -1;
         for (let startIdx = 0; startIdx + run.count <= allKicks.length; startIdx++) {
             if (!(startIdx + run.count - 1 < run.startIdx || startIdx > run.endIdx)) continue;
@@ -857,27 +1009,18 @@ function autoDetectAndFillEmpty() {
             const dEnd = (startIdx + run.count < allKicks.length) ? allKicks[startIdx + run.count] : duration;
             const donorNotes = notes.filter(n => n.start >= dStart - 0.05 && n.start < dEnd + 0.05);
             if (donorNotes.length === 0) continue;
-            if (score > bestScore) {
-                bestScore = score;
-                bestDonor = { start: dStart, end: dEnd, notes: donorNotes };
-            }
+            if (score > bestScore) { bestScore = score; bestDonor = { start: dStart, end: dEnd, notes: donorNotes }; }
         }
-
         if (!bestDonor) { skipped++; continue; }
-
         const offset = emptyStart - bestDonor.start;
         notes = notes.filter(n => !(n.start >= emptyStart - 0.05 && n.start < emptyEnd - 0.01));
         for (const dn of bestDonor.notes) {
             const newStart = dn.start + offset;
             const newEnd = Math.min(newStart + dn.dur, emptyEnd - 0.01);
-            const finalDur = newEnd - newStart;
-            if (finalDur >= 0.03) {
-                notes.push({ start: newStart, dur: finalDur, freq: dn.freq });
-            }
+            if (newEnd - newStart >= 0.03) notes.push({ start: newStart, dur: newEnd - newStart, freq: dn.freq });
         }
         filled++;
     }
-
     notes.sort((a, b) => a.start - b.start);
     setHint(`Пустот: ${runs.length} · заполнено: ${filled} · пропущено: ${skipped}`);
     afterEdit();
@@ -886,64 +1029,43 @@ function autoDetectAndFillEmpty() {
 function splitLongNotesByKicks() {
     const allKicks = getKicks();
     if (allKicks.length === 0) return;
-
-    const MIN_GAP = 0.04;
-    const MAX_NOTE_DUR = 0.4;
+    const MIN_GAP = 0.04, MAX_NOTE_DUR = 0.4;
     let splitCount = 0;
     const result = [];
-
     for (const note of notes) {
         if (note.dur <= MAX_NOTE_DUR) { result.push(note); continue; }
-        const kicksInside = allKicks.filter(k =>
-            k > note.start + MIN_GAP + 0.02 && k < note.start + note.dur - MIN_GAP - 0.02);
+        const kicksInside = allKicks.filter(k => k > note.start + MIN_GAP + 0.02 && k < note.start + note.dur - MIN_GAP - 0.02);
         if (kicksInside.length === 0) { result.push(note); continue; }
-
         const noteEnd = note.start + note.dur;
         let cursor = note.start, parts = 0;
         for (const k of kicksInside) {
             const partEnd = k - MIN_GAP;
-            const partDur = partEnd - cursor;
-            if (partDur >= 0.03) {
-                result.push({ start: cursor, dur: partDur, freq: note.freq });
-                parts++;
-            }
+            if (partEnd - cursor >= 0.03) { result.push({ start: cursor, dur: partEnd - cursor, freq: note.freq }); parts++; }
             cursor = k;
         }
-        const lastDur = noteEnd - cursor;
-        if (lastDur >= 0.03) {
-            result.push({ start: cursor, dur: lastDur, freq: note.freq });
-            parts++;
-        }
+        if (noteEnd - cursor >= 0.03) { result.push({ start: cursor, dur: noteEnd - cursor, freq: note.freq }); parts++; }
         if (parts > 1) splitCount++;
     }
-
-    notes = result;
-    notes.sort((a, b) => a.start - b.start);
+    notes = result; notes.sort((a, b) => a.start - b.start);
     setHint(`Разрезано ${splitCount} длинных нот`);
     afterEdit();
 }
 
 function cancelMode() {
-    gapMode = false;
-    momentMode = false;
-    pendingGapStart = null;
-    pendingMomentBox = { x1: null, x2: null };
+    gapMode = false; momentMode = false;
+    pendingGapStart = null; pendingMomentBox = { x1: null, x2: null };
     document.getElementById('btn-gap').classList.remove('btn-active');
     document.getElementById('btn-moment').classList.remove('btn-active');
-    setHint('Отменено');
-    draw();
+    setHint('Отменено'); draw();
 }
 
 function saveAsMoment() {
     if (selectedNotes.length === 0) {
-        momentMode = true;
-        pendingMomentBox = { x1: null, x2: null };
+        momentMode = true; pendingMomentBox = { x1: null, x2: null };
         document.getElementById('btn-moment').classList.add('btn-active');
-        setHint('Тапни начало');
-        draw();
-        return;
+        setHint('Тапни начало'); draw(); return;
     }
-    if (moments.length >= 4) { setHint('Максимум 4'); return; }
+    if (moments.length >= 4) return setHint('Максимум 4');
     const sorted = [...selectedNotes].sort((a, b) => a.start - b.start);
     const baseStart = sorted[0].start;
     const momentNotes = sorted.map(n => ({ start: n.start - baseStart, dur: n.dur, freq: n.freq }));
@@ -952,14 +1074,13 @@ function saveAsMoment() {
     moments.push({ id, name, notes: momentNotes });
     renderMomentsPanel();
     setHint(`Сохранён ${name}`);
-    selectedNotes = [];
-    draw();
+    selectedNotes = []; draw();
 }
 
 function renderMomentsPanel() {
     const panel = document.getElementById('moments-panel');
     if (moments.length === 0) {
-        panel.innerHTML = '<div style="color:#555;font-size:11px;padding:0 10px;">Моменты появятся здесь</div>';
+        panel.innerHTML = '<div class="moments-empty">Здесь появятся сохранённые моменты</div>';
         return;
     }
     panel.innerHTML = moments.map(m => `
@@ -973,52 +1094,43 @@ function renderMomentsPanel() {
     `).join('');
 
     panel.querySelectorAll('[data-del-moment]').forEach(el => {
-        el.addEventListener('click', (e) => {
-            e.stopPropagation();
-            deleteMoment(el.dataset.delMoment);
-        });
+        el.addEventListener('click', (e) => { e.stopPropagation(); deleteMoment(el.dataset.delMoment); });
     });
 
     panel.querySelectorAll('.moment-chip').forEach(chip => {
         chip.addEventListener('pointerdown', (e) => {
             e.preventDefault();
-            const id = chip.dataset.momentId;
-            draggedMoment = moments.find(m => m.id === id);
+            draggedMoment = moments.find(m => m.id === chip.dataset.momentId);
             chip.setPointerCapture(e.pointerId);
             setHint(`Тащите "${draggedMoment.name}"`);
         });
         chip.addEventListener('pointermove', (e) => {
             if (!draggedMoment) return;
             const rect = canvas.getBoundingClientRect();
-            const inCanvas = e.clientY > rect.top && e.clientY < rect.top + canvas.height;
+            const inCanvas = e.clientY > rect.top && e.clientY < rect.top + CANVAS_H;
             if (inCanvas) {
                 const x = e.clientX - rect.left;
                 const t = x / PPS;
                 const target = gaps.find(g => t >= g.start && t <= g.end);
-                dropTargetGapId = target ? target.id : null;
-                draw();
+                const newTarget = target ? target.id : null;
+                if (newTarget !== dropTargetGapId) { dropTargetGapId = newTarget; draw(); }
             } else if (dropTargetGapId) {
-                dropTargetGapId = null;
-                draw();
+                dropTargetGapId = null; draw();
             }
         });
         chip.addEventListener('pointerup', (e) => {
             if (!draggedMoment) return;
             const rect = canvas.getBoundingClientRect();
-            if (e.clientY > rect.top && e.clientY < rect.top + canvas.height) {
+            if (e.clientY > rect.top && e.clientY < rect.top + CANVAS_H) {
                 const x = e.clientX - rect.left;
                 const t = x / PPS;
                 const target = gaps.find(g => t >= g.start && t <= g.end);
                 if (target) insertMomentIntoGap(draggedMoment, target);
             }
-            draggedMoment = null;
-            dropTargetGapId = null;
-            draw();
+            draggedMoment = null; dropTargetGapId = null; draw();
         });
         chip.addEventListener('pointercancel', () => {
-            draggedMoment = null;
-            dropTargetGapId = null;
-            draw();
+            draggedMoment = null; dropTargetGapId = null; draw();
         });
     });
 }
@@ -1034,9 +1146,7 @@ function insertMomentIntoGap(moment, gap) {
     moment.notes.forEach(mn => {
         const newStart = gap.start + mn.start;
         const newEnd = Math.min(newStart + mn.dur, gap.end);
-        if (newEnd - newStart >= 0.03) {
-            notes.push({ start: newStart, dur: newEnd - newStart, freq: mn.freq });
-        }
+        if (newEnd - newStart >= 0.03) notes.push({ start: newStart, dur: newEnd - newStart, freq: mn.freq });
     });
     notes.sort((a, b) => a.start - b.start);
     setHint(`${moment.name} → ${gap.name}`);
@@ -1053,8 +1163,7 @@ function splitNote() {
     notes.splice(idx + 1, 0, { start: note.start + halfDur, freq: note.freq, dur: halfDur });
     note.dur = halfDur;
     selectedNotes = [];
-    playTapSound(note.freq);
-    afterEdit();
+    playTapSound(note.freq); afterEdit();
 }
 
 function joinNotes() {
@@ -1067,21 +1176,24 @@ function joinNotes() {
     notes.push({ start, freq, dur: end - start });
     notes.sort((a, b) => a.start - b.start);
     selectedNotes = [];
-    playTapSound(freq);
-    afterEdit();
+    playTapSound(freq); afterEdit();
 }
 
-// ============ PLAYBACK — rAF вместо audioprocess ============
+// ============ PLAYBACK ============
 function togglePlay() {
     initAudio();
-    if (wavesurfer.isPlaying()) {
-        wavesurfer.pause();
-    } else {
-        wavesurfer.play();
-    }
+    if (wavesurfer.isPlaying()) wavesurfer.pause();
+    else wavesurfer.play();
 }
 
 let rafId = null;
+let userScrolled = false;
+container.addEventListener('scroll', () => {
+    userScrolled = true;
+    clearTimeout(container._scrollT);
+    container._scrollT = setTimeout(() => { userScrolled = false; }, 1500);
+});
+
 function startPlayheadLoop() {
     if (rafId) cancelAnimationFrame(rafId);
     const loop = () => {
@@ -1091,8 +1203,13 @@ function startPlayheadLoop() {
         const x = time * PPS;
         playhead.style.left = x + 'px';
         playhead.style.display = 'block';
-        const w = container.clientWidth;
-        if (x > w / 2) container.scrollLeft = x - w / 2;
+        if (!userScrolled) {
+            const viewLeft = container.scrollLeft;
+            const viewRight = viewLeft + container.clientWidth;
+            if (x > viewRight - 80 || x < viewLeft + 20) {
+                container.scrollLeft = Math.max(0, x - container.clientWidth * 0.4);
+            }
+        }
         rafId = requestAnimationFrame(loop);
     };
     rafId = requestAnimationFrame(loop);
@@ -1103,28 +1220,21 @@ wavesurfer.on('play', () => {
     if (currentMode === 'live') startLiveSynth(wavesurfer.getCurrentTime());
     startPlayheadLoop();
 });
-
 wavesurfer.on('pause', () => {
     document.getElementById('play-btn').innerText = '▶';
     playhead.style.display = 'none';
     stopLiveSynth();
     if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
 });
-
 wavesurfer.on('finish', () => {
     document.getElementById('play-btn').innerText = '▶';
     playhead.style.display = 'none';
     stopLiveSynth();
     if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
 });
-
 wavesurfer.on('seek', () => {
     const time = wavesurfer.getCurrentTime();
     playhead.style.left = (time * PPS) + 'px';
-    if (currentMode === 'live' && wavesurfer.isPlaying()) {
-        stopLiveSynth();
-        startLiveSynth(time);
-    }
 });
 
 function formatTime(sec) {
