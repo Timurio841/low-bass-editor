@@ -283,17 +283,32 @@ function playTapSound(freq) {
     osc.start(t); osc.stop(t + 0.15);
 }
 
+// ============ ЗАГРУЗКА НОТ ============
 if (jobId) {
     fetch(`${SUPABASE_URL}/rest/v1/temp_notes?id=eq.${jobId}&select=notes`, {
         headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
     })
     .then(res => res.json())
     .then(data => {
-        if (data && data[0]) {
-            notes = data[0].notes || [];
+        if (data && data.length > 0 && data[0].notes) {
+            let rawNotes = data[0].notes;
+            // Если база вернула строку - парсим
+            if (typeof rawNotes === 'string') {
+                try { rawNotes = JSON.parse(rawNotes); } catch(e) { console.error("JSON Parse Error:", e); }
+            }
+            notes = rawNotes || [];
             notes.sort((a, b) => a.start - b.start);
             draw();
+            setHint(`✅ Загружено ${notes.length} нот`);
+            console.log("Notes loaded:", notes.length);
+        } else {
+            setHint("⚠️ Ноты не найдены в базе данных");
+            console.log("Invalid data structure:", data);
         }
+    })
+    .catch(err => {
+        console.error("Fetch error:", err);
+        setHint("⚠️ Ошибка загрузки нот");
     });
 }
 
@@ -454,7 +469,7 @@ function updateModeBadge() {
     }
 }
 
-// ============ PLAYBACK (главное) ============
+// ============ PLAYBACK ============
 let isPlaybackActive = false;
 let playheadRafId = null;
 let suppressNextPause = false;
@@ -538,7 +553,6 @@ function togglePlay() {
         wavesurfer.play().then(() => {
             if (!wasActive) startPlayheadLoop();
         }).catch(e => { console.warn('play err', e); });
-        // Не ждём промис — стартуем сразу, чтобы полоска не стояла
         startPlayheadLoop();
         document.getElementById('play-btn').innerText = '⏸';
         if (currentMode === 'live') startLiveSynth(wavesurfer.getCurrentTime());
@@ -557,7 +571,7 @@ wavesurfer.on('pause', () => {
     document.getElementById('play-btn').innerText = '▶';
     stopLiveSynth();
     stopPlayheadLoop();
-    playhead.style.display = 'block'; // остаётся на месте
+    playhead.style.display = 'block';
 });
 
 wavesurfer.on('finish', () => {
@@ -568,7 +582,6 @@ wavesurfer.on('finish', () => {
 });
 
 wavesurfer.on('timeupdate', (t) => {
-    // fallback: если по какой-то причине rAF умер, но аудио играет
     if (!isPlaybackActive && wavesurfer.isPlaying()) startPlayheadLoop();
     if (!isPlaybackActive) updatePlayheadUI(t);
 });
@@ -678,6 +691,7 @@ function draw() {
     drawBeatGrid(); drawKicks(); drawGaps(); drawPendingGap();
     ctx.fillStyle = '#555'; ctx.font = '11px system-ui';
     for (let i = 0; i <= duration; i += 5) ctx.fillText(i + 's', i * PPS + 3, 15);
+    
     notes.forEach(note => {
         const x = note.start * PPS;
         const w = Math.max(note.dur * PPS, 8);
@@ -766,7 +780,6 @@ canvas.addEventListener('pointerdown', (e) => {
     };
     try { canvas.setPointerCapture(e.pointerId); } catch(_) {}
 
-    // Пауза rAF, чтобы не дёргать playhead во время скраба
     if (isScrubbing && playheadRafId) {
         cancelAnimationFrame(playheadRafId);
         playheadRafId = null;
@@ -807,7 +820,6 @@ canvas.addEventListener('pointerup', (e) => {
     canvas.style.cursor = '';
     hideSeekIndicator();
 
-    // После скраба перезапускаем цикл, если проигрывание активно
     if (isPlaybackActive && !playheadRafId) startPlayheadLoop();
 
     if (wasMoved) {
