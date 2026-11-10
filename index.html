@@ -239,6 +239,13 @@ const bpm = parseFloat(urlParams.get('bpm') || "0");
 const screwedFactor = parseFloat(urlParams.get('screwed') || "1.0");
 const volBassFromUrl = parseFloat(urlParams.get('vol_bass') || "9.0");
 
+// === ИСПРАВЛЕНИЕ: Динамический PPS для длинных треков (лимит iOS Canvas) ===
+const MAX_CANVAS_WIDTH = 8000;
+let PPS = 100;
+if (duration * PPS > MAX_CANVAS_WIDTH) {
+    PPS = MAX_CANVAS_WIDTH / duration;
+}
+
 let kicks = [];
 const kicksStr = urlParams.get('kicks');
 if (kicksStr) kicks = kicksStr.split(',').map(s => parseFloat(s)).filter(k => !isNaN(k) && k >= 0);
@@ -292,7 +299,6 @@ if (jobId) {
     .then(data => {
         if (data && data.length > 0 && data[0].notes) {
             let rawNotes = data[0].notes;
-            // Если база вернула строку - парсим
             if (typeof rawNotes === 'string') {
                 try { rawNotes = JSON.parse(rawNotes); } catch(e) { console.error("JSON Parse Error:", e); }
             }
@@ -300,10 +306,8 @@ if (jobId) {
             notes.sort((a, b) => a.start - b.start);
             draw();
             setHint(`✅ Загружено ${notes.length} нот`);
-            console.log("Notes loaded:", notes.length);
         } else {
             setHint("⚠️ Ноты не найдены в базе данных");
-            console.log("Invalid data structure:", data);
         }
     })
     .catch(err => {
@@ -312,7 +316,6 @@ if (jobId) {
     });
 }
 
-const PPS = 100;
 const WAVE_TOP = 30, WAVE_H = 130;
 const NOTE_TOP = WAVE_TOP + WAVE_H + 10;
 const NOTE_BOTTOM = 20, NOTE_H = 14;
@@ -330,7 +333,10 @@ function resizeCanvas() {
     const w = duration * PPS + 20;
     const h = Math.max(container.clientHeight, 300);
     CANVAS_W = w; CANVAS_H = h;
-    const dpr = window.devicePixelRatio || 1;
+    
+    // Защита от слишком больших Canvas на iOS
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
     canvas.style.width = w + 'px';
@@ -514,7 +520,7 @@ function playheadTick() {
 function startPlayheadLoop() {
     isPlaybackActive = true;
     if (playheadRafId) return;
-    playheadTick(); // первый тик синхронно
+    playheadTick();
 }
 
 function stopPlayheadLoop() {
